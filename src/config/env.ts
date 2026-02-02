@@ -41,11 +41,16 @@ const envSchema = z.object({
 
 const parseResult = envSchema.safeParse(process.env);
 
+const SENSITIVE_KEYS = new Set(['DATABASE_URL', 'JWT_SECRET', 'OPENAI_API_KEY', 'FISH_AUDIO_API_KEY', 'APPLE_SHARED_SECRET']);
+
 if (!parseResult.success) {
   console.error('❌ Invalid environment variables:', parseResult.error.flatten().fieldErrors);
   process.exit(1);
 } else {
-  console.log(`✅ Environment variables loaded successfully: ${JSON.stringify(parseResult.data, null, 2)}`);
+  const safe = Object.fromEntries(
+    Object.entries(parseResult.data).map(([k, v]) => [k, SENSITIVE_KEYS.has(k) ? '[REDACTED]' : v])
+  );
+  console.log(`✅ Environment variables loaded successfully: ${JSON.stringify(safe, null, 2)}`);
 }
 
 export const env = parseResult.data;

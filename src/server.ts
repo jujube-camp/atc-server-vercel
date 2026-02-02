@@ -33,10 +33,12 @@ declare module 'fastify' {
  * Build and configure the Fastify server
  */
 async function buildServer() {
+  // Never use pino-pretty on Vercel/serverless (transport fails; pino-pretty not available)
+  const usePrettyLogger = env.NODE_ENV === 'development' && env.VERCEL !== '1';
   const server = Fastify({
     logger: {
       level: env.LOG_LEVEL,
-      transport: env.NODE_ENV === 'development' ? {
+      transport: usePrettyLogger ? {
         target: 'pino-pretty',
         options: {
           translateTime: 'HH:MM:ss Z',

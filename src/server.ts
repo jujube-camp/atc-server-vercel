@@ -133,7 +133,7 @@ async function buildServer() {
         await prisma.authSession.update({
           where: { id: sessionId },
           data: { lastActiveAt: new Date() },
-        }).catch((err) => {
+        }).catch((err: unknown) => {
           // Log but don't fail if update fails
           server.log.warn({ err, sessionId }, 'Failed to update session lastActiveAt');
         });
@@ -146,7 +146,7 @@ async function buildServer() {
         userId: userId,
         email: email,
       };
-    } catch (err) {
+    } catch (err: unknown) {
       // JWT verification failed - return 401 unauthorized
       server.log.warn({ err }, 'JWT verification failed');
       reply.code(401).send({ 
@@ -221,7 +221,7 @@ async function buildServer() {
         await prisma.authSession.update({
           where: { id: sessionId },
           data: { lastActiveAt: new Date() },
-        }).catch((err) => {
+        }).catch((err: unknown) => {
           // Log but don't fail if update fails
           server.log.warn({ err, sessionId }, 'Failed to update session lastActiveAt');
         });
@@ -236,7 +236,7 @@ async function buildServer() {
       };
       
       return true; // Successfully authenticated
-    } catch (err) {
+    } catch (err: unknown) {
       // Check if this is a session invalidation error (should propagate to client)
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (errorMessage === 'Session invalidated') {

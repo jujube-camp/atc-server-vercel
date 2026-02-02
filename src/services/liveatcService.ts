@@ -41,15 +41,15 @@ export class LiveATCService {
     });
 
     // Transform database feeds to API format
-    const transformedFeeds: ATCFeed[] = feeds.map(feed => {
+    type FeedRow = { id: string; name: string | null; streamUrl: string | null; plsUrl: string | null; icao: string | null; isFree?: boolean };
+    const transformedFeeds: ATCFeed[] = feeds.map((feed: FeedRow) => {
       // Ensure streamUrl is always a string (required by schema)
       const streamUrl = feed.streamUrl || feed.plsUrl || '';
       
       // Ensure isFree is always a boolean (required by schema)
       // Handle case where isFree might be null (for existing records before migration)
       // Type assertion needed because Prisma types may not be updated yet
-      const feedWithIsFree = feed as typeof feed & { isFree?: boolean };
-      const isFree = feedWithIsFree.isFree ?? false;
+      const isFree = feed.isFree ?? false;
       
       // Ensure all required string fields are not null/undefined
       return {

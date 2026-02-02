@@ -1,6 +1,9 @@
 import { prisma } from '../utils/prisma.js';
+import type { Prisma } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
 import { logger as defaultLogger } from '../utils/logger.js';
+
+type MembershipRow = { id: string; user_id: string; tier: string; expires_at: Date | null; created_at: Date; updated_at: Date };
 
 export enum MembershipTier {
   FREE = 'FREE',
@@ -329,19 +332,12 @@ export class MembershipService {
     userId: string,
     logger: FastifyBaseLogger = defaultLogger
   ): Promise<{ allowed: boolean; reason?: string }> {
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Get or create membership to determine limits
       // Use FOR UPDATE to lock the membership row and prevent concurrent access
-      let membership = await tx.$queryRaw<Array<{
-        id: string;
-        user_id: string;
-        tier: string;
-        expires_at: Date | null;
-        created_at: Date;
-        updated_at: Date;
-      }>>`
+      let membership = await tx.$queryRaw<MembershipRow[]>`
         SELECT * FROM "memberships" WHERE "user_id" = ${userId} FOR UPDATE
-      `.then(rows => rows[0]);
+      `.then((rows: MembershipRow[]) => rows[0]);
 
       if (!membership) {
         // Create default FREE membership
@@ -426,7 +422,7 @@ export class MembershipService {
       `;
 
       // Calculate total usage
-      const totalUsage = usageRecords.reduce((sum, record) => sum + Number(record.count), 0);
+      const totalUsage = usageRecords.reduce((sum: number, record: { count: bigint }) => sum + Number(record.count), 0);
 
       // Check if incrementing would exceed the limit
       if (totalUsage >= maxRecordingAnalyses) {
@@ -481,19 +477,12 @@ export class MembershipService {
     userId: string,
     logger: FastifyBaseLogger = defaultLogger
   ): Promise<{ allowed: boolean; reason?: string }> {
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Get or create membership to determine limits
       // Use FOR UPDATE to lock the membership row and prevent concurrent access
-      let membership = await tx.$queryRaw<Array<{
-        id: string;
-        user_id: string;
-        tier: string;
-        expires_at: Date | null;
-        created_at: Date;
-        updated_at: Date;
-      }>>`
+      let membership = await tx.$queryRaw<MembershipRow[]>`
         SELECT * FROM "memberships" WHERE "user_id" = ${userId} FOR UPDATE
-      `.then(rows => rows[0]);
+      `.then((rows: MembershipRow[]) => rows[0]);
 
       if (!membership) {
         // Create default FREE membership
@@ -578,7 +567,7 @@ export class MembershipService {
       `;
 
       // Calculate total usage
-      const totalUsage = usageRecords.reduce((sum, record) => sum + Number(record.count), 0);
+      const totalUsage = usageRecords.reduce((sum: number, record: { count: bigint }) => sum + Number(record.count), 0);
 
       // Check if incrementing would exceed the limit
       if (totalUsage >= maxTrainingSessions) {
@@ -670,8 +659,8 @@ export class MembershipService {
       },
     });
     
-    const trainingSessionsCount = allTrainingUsage.reduce((sum, record) => sum + record.count, 0);
-    const recordingUploadsCount = allRecordingUsage.reduce((sum, record) => sum + record.count, 0);
+    const trainingSessionsCount = allTrainingUsage.reduce((sum: number, record: { count: number }) => sum + record.count, 0);
+    const recordingUploadsCount = allRecordingUsage.reduce((sum: number, record: { count: number }) => sum + record.count, 0);
 
     // Get limit configuration from database
     const tierConfig = await this.getTierLimitConfig(membership.tier);

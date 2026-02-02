@@ -122,7 +122,7 @@ export class TrainingModeController {
           }
         })
         .filter((config): config is TrainingModeConfig => config !== null)
-        .sort((a, b) => a.displayOrder - b.displayOrder);
+        .sort((a: TrainingModeConfig, b: TrainingModeConfig) => a.displayOrder - b.displayOrder);
 
       return reply.send(configs);
     } catch (error) {

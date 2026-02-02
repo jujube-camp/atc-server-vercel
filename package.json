@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:vercel": "vercel dev --yes",
-    "build": "tsc && cp -r src/prompts dist/prompts && mkdir -p dist/common && cp src/common/fsm.yaml dist/common/fsm.yaml",
+    "build": "prisma generate && tsc && cp -r src/prompts dist/prompts && mkdir -p dist/common && cp src/common/fsm.yaml dist/common/fsm.yaml",
     "start": "NODE_ENV=production node dist/server.js",
     "deploy": "vercel",
     "deploy:prod": "vercel --prod",

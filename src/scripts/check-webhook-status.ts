@@ -18,7 +18,8 @@ async function checkWebhookStatus() {
     if (memberships.length === 0) {
       console.log('   ❌ No PREMIUM memberships found\n');
     } else {
-      memberships.forEach((m, i) => {
+      type MembershipRow = { user: { email: string }; tier: string; expiresAt: Date | null; updatedAt: Date };
+      memberships.forEach((m: MembershipRow, i: number) => {
         console.log(`   ${i + 1}. User: ${m.user.email}`);
         console.log(`      Tier: ${m.tier}`);
         console.log(`      Expires At: ${m.expiresAt ? m.expiresAt.toISOString() : 'NULL'}`);
@@ -81,7 +82,8 @@ async function checkWebhookStatus() {
       console.log('   ✅ No memberships expiring in the next 2 minutes\n');
     } else {
       console.log(`   ⚠️  ${expiringSoon.length} membership(s) expiring soon:`);
-      expiringSoon.forEach((m) => {
+      type ExpiringRow = { user: { email: string }; expiresAt: Date | null };
+      expiringSoon.forEach((m: ExpiringRow) => {
         const minutesUntilExpiry = m.expiresAt 
           ? Math.floor((m.expiresAt.getTime() - Date.now()) / 1000 / 60)
           : 0;

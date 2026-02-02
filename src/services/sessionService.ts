@@ -234,7 +234,8 @@ export class SessionService {
       },
     });
 
-    const items = transmissions.map(t => ({
+    type TransmissionWithEval = (typeof transmissions)[number];
+    const items = transmissions.map((t: TransmissionWithEval) => ({
       id: t.id,
       timestamp: t.createdAt,
       sender: t.sender,
@@ -279,7 +280,8 @@ export class SessionService {
     });
 
     const phaseToScores: Record<string, number[]> = {};
-    transmissions.forEach(t => {
+    type TransWithScore = (typeof transmissions)[number];
+    transmissions.forEach((t: TransWithScore) => {
       const score = t.evaluation?.score ?? null;
       if (score === null || score === undefined) return;
       if (!phaseToScores[t.current_phase]) phaseToScores[t.current_phase] = [];
@@ -365,10 +367,11 @@ export class SessionService {
       select: { id: true, audio_url: true },
     });
 
-    const transmissionEventIds = transmissionEvents.map(e => e.id);
+    type TransEvent = (typeof transmissionEvents)[number];
+    const transmissionEventIds = transmissionEvents.map((e: TransEvent) => e.id);
     const audioFiles = transmissionEvents
-      .map(e => e.audio_url)
-      .filter((key): key is string => !!key);
+      .map((e: TransEvent) => e.audio_url)
+      .filter((key: string | null): key is string => !!key);
 
     if (audioFiles.length > 0) {
       await S3Service.deleteAudioBatch(audioFiles, logger);

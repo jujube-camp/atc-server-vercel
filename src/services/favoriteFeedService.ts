@@ -84,7 +84,7 @@ export class FavoriteFeedService {
         },
       });
 
-      return favorites.map((f) => f.feedId);
+      return favorites.map((f: { feedId: string }) => f.feedId);
     } catch (error: any) {
       // If table doesn't exist or other database error, return empty array
       // This can happen if migration hasn't been run yet

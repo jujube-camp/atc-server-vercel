@@ -1,0 +1,40 @@
+version: 0.2
+
+env:
+  variables:
+    IMAGE_REPO_NAME: "atc-server"                     
+    AWS_REGION: "us-west-2"                  
+
+phases:
+  install:
+    runtime-versions:
+      docker: 20
+
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 928451053053.dkr.ecr.us-west-2.amazonaws.com
+      - IMAGE_URI=928451053053.dkr.ecr.us-west-2.amazonaws.com/atc-server
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - echo COMMIT_HASH=$COMMIT_HASH
+      - echo IMAGE_URI=$IMAGE_URI
+
+  build:
+    commands:
+      - echo Build Docker image...
+      - docker build -t $IMAGE_REPO_NAME:$COMMIT_HASH .
+      - docker tag $IMAGE_REPO_NAME:$COMMIT_HASH $IMAGE_URI:$COMMIT_HASH
+      - docker tag $IMAGE_REPO_NAME:$COMMIT_HASH $IMAGE_URI:latest
+
+  post_build:
+    commands:
+      - echo Push Docker image...
+      - docker push $IMAGE_URI:$COMMIT_HASH
+      - docker push $IMAGE_URI:latest
+      - echo "Writing image definitions file..."
+      - printf '[{"name":"$IMAGE_REPO_NAME","imageUri":"%s:%s"}]' $IMAGE_URI $COMMIT_HASH > imagedefinitions.json
+      - cat imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json

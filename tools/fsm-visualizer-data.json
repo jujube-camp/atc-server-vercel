@@ -1,0 +1,639 @@
+{
+  "id": "smart-atc-fsm",
+  "version": "1.1.1",
+  "states": [
+    {
+      "id": "PARKING_STARTUP",
+      "label": "Startup",
+      "description": "Aircraft is parked on the ramp coordinating ATIS, request, and taxi clearance with Ground.",
+      "group": "Pre-Flight",
+      "atc_guidance": {
+        "response_focus": "Provide a precise route to the active runway. Verify the pilot has the current ATIS code if not stated.",
+        "examples": [
+          "[aircraft type] [Tailnumber], [XXX] Ground, verify have Information Alpha.",
+          "[aircraft type] [Tailnumber], taxi to Runway Two Seven via Hotel, Zulu. Hold short Runway Two Seven."
+        ]
+      },
+      "env_tools": [
+        "getExpectedRunway"
+      ]
+    },
+    {
+      "id": "TAXI_OUT",
+      "label": "Taxi to Runway",
+      "description": "Pilot is taxiing to the departure runway with the given taxi route.",
+      "group": "Pre-Flight",
+      "atc_guidance": {
+        "response_focus": "Monitor taxi progress, no need to give new taxi route; Direct the handoff  to Tower at the queue.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], contact Tower on One One Niner Point Seven when number one."
+        ]
+      }
+    },
+    {
+      "id": "HOLD_SHORT",
+      "label": "Holding Short",
+      "description": "Aircraft is holding short awaiting LUAW or takeoff clearance.",
+      "group": "Pre-Flight",
+      "atc_guidance": {
+        "response_focus": "Sequence departures and promptly issue LUAW or takeoff clearance with runway reference.",
+        "examples": [
+          "[aircraft type] [Tailnumber], Runway Two Seven, line up and wait.",
+          "[aircraft type] [Tailnumber], Runway Two Seven, cleared for takeoff."
+        ]
+      },
+      "env_tools": [
+        "getTakeoffSituation"
+      ]
+    },
+    {
+      "id": "LINE_UP_AND_WAIT",
+      "label": "Line Up and Wait",
+      "description": "Aircraft is on the runway awaiting takeoff clearance.",
+      "group": "Pre-Flight",
+      "atc_guidance": {
+        "response_focus": "Monitor the runway, then issue or cancel takeoff clearance with any follow-on instructions.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], Runway Two Seven, cleared for takeoff."
+        ]
+      }
+    },
+    {
+      "id": "CLIMBING",
+      "label": "Initial Climb / After Takeoff",
+      "description": "Aircraft is airborne complying with departure or pattern instructions.",
+      "group": "Departure",
+      "atc_guidance": {
+        "response_focus": "Handle off to departure frequency if flight mode is VFR flight and the pilot is  departing the airfield. If the flight mode is pattern work, or pilot requested traffic pattern, issue pattern entry instructions.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], contact Departure on one two four point three.",
+          "[aircraft type] [Tailnumber], make left closed traffic."
+        ]
+      }
+    },
+    {
+      "id": "DEPARTURE",
+      "label": "Departing",
+      "description": "Pilot has switched to Departure/Approach control after leaving Tower airspace and is awaiting radar contact or further climb/heading instructions.",
+      "group": "Departure",
+      "atc_guidance": {
+        "response_focus": "Acknowledge radar contact, restate altitude if needed, and issue any departure headings, climb restrictions, or flow advisories. Keep the exchange strictly on the Departure frequency.",
+        "examples": [
+          "Departure, [aircraft type] [Tailnumber], passing two thousand five hundred for five thousand.",
+          "[aircraft type] [Tailnumber], radar contact, fly heading two seven zero, climb and maintain five thousand."
+        ]
+      }
+    },
+    {
+      "id": "CRUISING",
+      "label": "Cruise / Enroute",
+      "description": "Aircraft is established enroute after checking in with Departure. Pilot is now receiving headings/advisories or cruising VFR after radar services were terminated.",
+      "group": "Departure",
+      "atc_guidance": {
+        "response_focus": "Departure/Center typically remains silent unless the pilot requests something. When the pilot requests the arrival or you need to start sequencing, issue the frequency change to Approach (or the next facility) with runway/approach expectations.",
+        "examples": [
+          "[aircraft type] [Tailnumber], contact NorCal Approach on one two four point three."
+        ]
+      }
+    },
+    {
+      "id": "ARRIVAL",
+      "label": "Arrival Sequencing",
+      "description": "Aircraft is on Approach/Center frequency inbound to the airport, receiving vectors, altitudes, and sequencing prior to Tower handoff.",
+      "group": "Arrival",
+      "atc_guidance": {
+        "response_focus": "Sequence arrivals by issuing headings, altitudes, speed restrictions, and approach clearances or pattern-entry expectations. When the aircraft is established inbound, issue the frequency change to Tower with runway confirmation.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], fly heading one eight zero, descend and maintain three thousand, expect left traffic Runway Two Seven.",
+          "[aircraft type] [Tailnumber], cleared straight-in Runway Two Seven, maintain four thousand until established.",
+          "[aircraft type] [Tailnumber], contact Tower on one one niner point seven."
+        ]
+      },
+      "env_tools": [
+        "getExpectedRunway"
+      ]
+    },
+    {
+      "id": "ENTER_AIRSPACE",
+      "label": "Enter Tower Airspace",
+      "description": "Approach has handed the aircraft to Tower and two-way communication is established inside the airspace area. The pilot is awaiting Tower instructions for pattern entry or straight-in sequencing.",
+      "group": "Arrival",
+      "atc_guidance": {
+        "response_focus": "Acknowledge the aircraft on frequency, confirm runway assignment, and advise whether to expect pattern entry or a straight-in continuation.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], Tower, enter left traffic Runway Two Seven, report midfield downwind.",
+          "[aircraft type] [Tailnumber], Tower, continue straight-in Runway Two Seven, report five mile final."
+        ]
+      },
+      "env_tools": [
+        "getExpectedRunway"
+      ]
+    },
+    {
+      "id": "PATTERN_ENTRY",
+      "label": "Pattern Entry",
+      "description": "Aircraft is entering the traffic pattern from approach (inbound from cruise/enroute).",
+      "group": "Arrival",
+      "atc_guidance": {
+        "response_focus": "Assign pattern direction, altitude, and any reporting points needed to merge into traffic. Do not issue landing clearance during this phase.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], enter left downwind Runway Two Seven, report midfield."
+        ]
+      },
+      "env_tools": [
+        "getLandingSituation"
+      ]
+    },
+    {
+      "id": "TRAFFIC_PATTERN",
+      "label": "Traffic Pattern",
+      "description": "Aircraft is established in the traffic pattern or on approach.",
+      "group": "Arrival",
+      "atc_guidance": {
+        "response_focus": "Issue landing clearance when available. Direct go-arounds or clear-for-option instructions with explicit pattern guidance.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], Runway Two Seven, cleared to land.",
+          "[aircraft type] [Tailnumber], Runway Two Seven, cleared for the option, make left closed traffic.",
+          "[aircraft type] [Tailnumber], go around, fly runway heading."
+        ]
+      },
+      "env_tools": [
+        "getLandingSituation"
+      ]
+    },
+    {
+      "id": "SHORT_FINAL",
+      "label": "Short Final",
+      "description": "Aircraft is established on short final after receiving landing clearance.",
+      "group": "Arrival",
+      "atc_guidance": {
+        "response_focus": "Monitor short final for runway conflicts, give late landing/option changes, or issue go-around instructions if runway becomes unavailable.",
+        "examples": [
+          "[aircraft type] [Tailnumber], go around, fly runway heading.",
+          "[aircraft type] [Tailnumber], winds now two four zero at two zero gust two eight, continue if able."
+        ]
+      },
+      "env_tools": [
+        "getLandingSituation"
+      ]
+    },
+    {
+      "id": "STRAIGHT_IN",
+      "label": "Straight-In Approach",
+      "description": "Aircraft is established on a straight-in final or extended centerline inbound to the runway but not yet on short final.",
+      "group": "Arrival",
+      "atc_guidance": {
+        "response_focus": "Monitor inbound spacing, reiterate runway/altitude expectations, and issue landing clearance or “continue” instructions when appropriate.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], continue straight-in Runway Two Seven, expect late landing clearance.",
+          "[aircraft type] [Tailnumber], Runway Two Seven, cleared to land."
+        ]
+      },
+      "env_tools": [
+        "getLandingSituation"
+      ]
+    },
+    {
+      "id": "ROLLOUT",
+      "label": "Rollout",
+      "description": "Aircraft has landed and is rolling out on the runway, preparing to vacate.",
+      "group": "Post-Landing",
+      "atc_guidance": {
+        "response_focus": "Issue runway exit instructions immediately, include taxiways, then hand the pilot to Ground for taxi. If pilot requests taxi on Tower frequency, provide exit instructions and handoff.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], turn left at Bravo, contact Ground point seven for taxi.",
+          "[aircraft type] [Tailnumber], roll to Charlie and hold short, traffic landing behind you."
+        ]
+      }
+    },
+    {
+      "id": "EMERGENCY",
+      "label": "Emergency",
+      "description": "An emergency has been declared; the aircraft is receiving priority handling for sequencing, approach, or landing.",
+      "group": "Emergency",
+      "atc_guidance": {
+        "response_focus": "Prioritize the emergency aircraft, gather souls/fuel/intentions, and coordinate recovery.",
+        "tower_initiate": true,
+        "examples": [
+          "[aircraft type] [Tailnumber], cleared to land any runway, say souls on board and fuel remaining."
+        ]
+      }
+    },
+    {
+      "id": "TAXI_BACK",
+      "label": "Taxi to Stand",
+      "description": "Aircraft has exited the runway and is taxiing back to parking or the ramp under Ground control.",
+      "group": "Post-Landing",
+      "atc_guidance": {
+        "response_focus": "Provide taxi routing to parking, including hold-short instructions and give-way directives as needed.",
+        "examples": [
+          "[aircraft type] [Tailnumber], taxi to parking via Zulu, Alpha.",
+          "[aircraft type] [Tailnumber], taxi via Charlie, hold short Runway Two Seven."
+        ]
+      }
+    },
+    {
+      "id": "SHUTDOWN",
+      "label": "Shutdown",
+      "description": "Flight is complete; aircraft is parked and shutting down.",
+      "group": "Post-Landing",
+      "atc_guidance": {
+        "response_focus": "No proactive ATC response required; monitor the frequency and respond if called."
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "PARKING_STARTUP__TAXI_OUT",
+      "from": "PARKING_STARTUP",
+      "to": "TAXI_OUT",
+      "user_label": "Start Taxi",
+      "description": "Pilot begins taxiing to the runway.",
+      "requirements": [
+        "Pilot reported the current ATIS code.",
+        "Pilot stated ground movement intentions.",
+        "Ground issued a taxi route to the runway.",
+        "Pilot read back runway, taxiways, and hold short instructions with callsign."
+      ]
+    },
+    {
+      "id": "TAXI_OUT__HOLD_SHORT",
+      "from": "TAXI_OUT",
+      "to": "HOLD_SHORT",
+      "user_label": "Hold Short",
+      "description": "Pilot reaches the runway queue, and holds short of the runway.",
+      "requirements": [
+        "Ground handed off to tower.",
+        "Pilot acknowledged the handoff with callsign."
+      ]
+    },
+    {
+      "id": "TAXI_OUT__TAXI_BACK",
+      "from": "TAXI_OUT",
+      "to": "TAXI_BACK",
+      "user_label": "Return to Parking",
+      "description": "Pilot turns around and returns to parking.",
+      "requirements": [
+        "Pilot requested taxi back or return to parking.",
+        "Ground issued taxi instructions back to parking.",
+        "Pilot read back the taxi route with callsign."
+      ]
+    },
+    {
+      "id": "HOLD_SHORT__LINE_UP_AND_WAIT",
+      "from": "HOLD_SHORT",
+      "to": "LINE_UP_AND_WAIT",
+      "user_label": "Line Up",
+      "description": "Pilot enters the runway and lines up to wait for takeoff clearance.",
+      "requirements": [
+        "Tower issued LUAW for a specific runway.",
+        "Pilot acknowledged LUAW with runway and callsign."
+      ]
+    },
+    {
+      "id": "HOLD_SHORT__CLIMBING",
+      "from": "HOLD_SHORT",
+      "to": "CLIMBING",
+      "user_label": "Take Off",
+      "description": "Pilot moves to the runway and takes off.",
+      "requirements": [
+        "Tower issued takeoff clearance for the runway.",
+        "Pilot acknowledged the clearance with runway number and callsign."
+      ]
+    },
+    {
+      "id": "HOLD_SHORT__TAXI_BACK",
+      "from": "HOLD_SHORT",
+      "to": "TAXI_BACK",
+      "user_label": "Taxi Back",
+      "description": "Pilot turns around and returns to parking.",
+      "requirements": [
+        "Pilot or Tower cancelled the departure.",
+        "Ground or Tower issued exit/taxi-back instructions.",
+        "Pilot acknowledged the instructions with callsign."
+      ]
+    },
+    {
+      "id": "LINE_UP_AND_WAIT__CLIMBING",
+      "from": "LINE_UP_AND_WAIT",
+      "to": "CLIMBING",
+      "user_label": "Take Off",
+      "description": "Pilot takes off on the runway.",
+      "requirements": [
+        "Tower issued takeoff clearance including runway.",
+        "Pilot acknowledged with runway number and callsign."
+      ]
+    },
+    {
+      "id": "LINE_UP_AND_WAIT__TAXI_BACK",
+      "from": "LINE_UP_AND_WAIT",
+      "to": "TAXI_BACK",
+      "user_label": "Exit Runway",
+      "description": "Pilot exits the runway and returns to parking.",
+      "requirements": [
+        "Tower instructed the aircraft to exit or taxi back.",
+        "Pilot acknowledged exit instructions with callsign."
+      ]
+    },
+    {
+      "id": "CLIMBING__DEPARTURE",
+      "from": "CLIMBING",
+      "to": "DEPARTURE",
+      "user_label": "Leave terminal area",
+      "description": "Aircraft is leaving the terminal area.",
+      "requirements": [
+        "Tower issued frequency change to Departure.",
+        "Pilot acknowledged the frequency change with callsign."
+      ]
+    },
+    {
+      "id": "DEPARTURE__CRUISING",
+      "from": "DEPARTURE",
+      "to": "CRUISING",
+      "user_label": "Cruising",
+      "description": "Aircraft is cruising enroute, and is preparing arrival.",
+      "requirements": [
+        "Pilot checked in with Departure on the assigned frequency.",
+        "Departure issued headings/advisories or radar-service instructions.",
+        "Pilot acknowledged Departure's instructions with callsign."
+      ]
+    },
+    {
+      "id": "CLIMBING__TRAFFIC_PATTERN",
+      "from": "CLIMBING",
+      "to": "TRAFFIC_PATTERN",
+      "user_label": "Enter Pattern",
+      "description": "Pilot enters the traffic pattern for closed traffic or pattern work.",
+      "requirements": [
+        "Tower assigned closed traffic/pattern work or go-around instructions.",
+        "Pilot acknowledged the instructions with pattern direction and callsign."
+      ]
+    },
+    {
+      "id": "CRUISING__ARRIVAL",
+      "from": "CRUISING",
+      "to": "ARRIVAL",
+      "user_label": "Start Approach",
+      "description": "Departure hands the aircraft to Approach/Center and the pilot checks in to begin the arrival sequence.",
+      "requirements": [
+        "Departure issued handoff/approach frequency instructions.",
+        "Pilot contacted Approach on the assigned frequency.",
+        "Approach acknowledged the aircraft and provided sequencing guidance."
+      ]
+    },
+    {
+      "id": "ANY__EMERGENCY",
+      "from": [
+        "CLIMBING",
+        "DEPARTURE",
+        "CRUISING",
+        "ARRIVAL",
+        "ENTER_AIRSPACE",
+        "STRAIGHT_IN",
+        "SHORT_FINAL",
+        "TRAFFIC_PATTERN"
+      ],
+      "to": "EMERGENCY",
+      "user_label": "Enter Emergency",
+      "description": "Pilot enters emergency procedure.",
+      "requirements": [
+        "Pilot declared an emergency or mayday/pan-pan.",
+        "Tower acknowledged the emergency and began coordination."
+      ]
+    },
+    {
+      "id": "ARRIVAL__ENTER_AIRSPACE",
+      "from": "ARRIVAL",
+      "to": "ENTER_AIRSPACE",
+      "user_label": "Enter terminal area",
+      "description": "Approach/Center hands the aircraft to Tower and two-way communication is established on the tower frequency.",
+      "requirements": [
+        "Approach instructed the aircraft to contact Tower (frequency/hand-off).",
+        "Pilot contacted Tower on the assigned frequency.",
+        "Tower acknowledged the aircraft and confirmed contact."
+      ]
+    },
+    {
+      "id": "ENTER_AIRSPACE__STRAIGHT_IN",
+      "from": "ENTER_AIRSPACE",
+      "to": "STRAIGHT_IN",
+      "user_label": "Straight-In",
+      "description": "Tower assigns or clears the aircraft to continue for a straight-in approach.",
+      "requirements": [
+        "Tower issued straight-in approach clearance or continue instructions.",
+        "Pilot acknowledged the instructions with callsign."
+      ]
+    },
+    {
+      "id": "ENTER_AIRSPACE__PATTERN_ENTRY",
+      "from": "ENTER_AIRSPACE",
+      "to": "PATTERN_ENTRY",
+      "user_label": "Descend",
+      "description": "Tower issues pattern entry instructions once the aircraft is in the airspace.",
+      "requirements": [
+        "Tower issued pattern entry instructions with runway/pattern details.",
+        "Pilot acknowledged the instructions with callsign."
+      ]
+    },
+    {
+      "id": "STRAIGHT_IN__SHORT_FINAL",
+      "from": "STRAIGHT_IN",
+      "to": "SHORT_FINAL",
+      "user_label": "Join Final",
+      "description": "Aircraft continues from the straight-in approach segment onto short final.",
+      "requirements": [
+        "Tower confirmed straight-in clearance and runway availability.",
+        "Pilot reported established on final or acknowledged continuing inbound."
+      ]
+    },
+    {
+      "id": "PATTERN_ENTRY__TRAFFIC_PATTERN",
+      "from": "PATTERN_ENTRY",
+      "to": "TRAFFIC_PATTERN",
+      "user_label": "Join Pattern",
+      "description": "Pilot establishes in the traffic pattern.",
+      "requirements": [
+        "Aircraft is established in the traffic pattern.",
+        "Tower acknowledged aircraft position in pattern."
+      ]
+    },
+    {
+      "id": "TRAFFIC_PATTERN__SHORT_FINAL",
+      "from": "TRAFFIC_PATTERN",
+      "to": "SHORT_FINAL",
+      "user_label": "Turn Final",
+      "description": "Aircraft turns final from the pattern with landing clearance in hand.",
+      "requirements": [
+        "Tower issued landing or option clearance for the runway.",
+        "Pilot reported/acknowledged turning final with callsign."
+      ]
+    },
+    {
+      "id": "SHORT_FINAL__ROLLOUT",
+      "from": "SHORT_FINAL",
+      "to": "ROLLOUT",
+      "user_label": "Land",
+      "description": "Aircraft lands and rolls out on the runway.",
+      "requirements": [
+        "Tower has previously issued landing clearance or option clearance (Except for emergency landing).",
+        "Tower has no go-around instruction, nor pilot requested go-around."
+      ]
+    },
+    {
+      "id": "SHORT_FINAL__CLIMBING",
+      "from": "SHORT_FINAL",
+      "to": "CLIMBING",
+      "user_label": "Touch and Go / Go Around",
+      "description": "Pilot performs a touch-and-go or executes a go-around from short final.",
+      "requirements": [
+        "Pilot said or instructed to go-around, or has been approved for option/touch-and-go."
+      ]
+    },
+    {
+      "id": "EMERGENCY__SHORT_FINAL",
+      "from": "EMERGENCY",
+      "to": "SHORT_FINAL",
+      "user_label": "Emergency Approach",
+      "description": "Pilot executes an emergency approach to short final.",
+      "requirements": [
+        "Tower cleared the aircraft to land (any runway).",
+        "Pilot acknowledged the clearance."
+      ]
+    },
+    {
+      "id": "ROLLOUT__TAXI_BACK",
+      "from": "ROLLOUT",
+      "to": "TAXI_BACK",
+      "user_label": "Exit Runway",
+      "description": "Pilot exits the runway.",
+      "requirements": [
+        "Tower issued exit/taxi instructions.",
+        "Pilot acknowledged the instructions with callsign."
+      ]
+    },
+    {
+      "id": "TAXI_BACK__SHUTDOWN",
+      "from": "TAXI_BACK",
+      "to": "SHUTDOWN",
+      "user_label": "Park and Shutdown",
+      "description": "Pilot reaches parking and shuts down.",
+      "requirements": [
+        "Any final taxi instructions were acknowledged with callsign."
+      ]
+    }
+  ],
+  "flightModes": {
+    "approach": {
+      "label": "Approach Training",
+      "description": "Practice inbound approach procedures. Aircraft starts 10 miles out and must communicate with ATC to receive approach clearance, enter the pattern or fly straight-in, and land safely.",
+      "start_state": "CRUISING",
+      "initial_location": "10 miles out, inbound",
+      "initial_squawk": "1200",
+      "terminal_states": [
+        "SHUTDOWN"
+      ],
+      "allowed_transition_ids": [
+        "CRUISING__ARRIVAL",
+        "ARRIVAL__ENTER_AIRSPACE",
+        "ENTER_AIRSPACE__STRAIGHT_IN",
+        "ENTER_AIRSPACE__PATTERN_ENTRY",
+        "STRAIGHT_IN__SHORT_FINAL",
+        "PATTERN_ENTRY__TRAFFIC_PATTERN",
+        "TRAFFIC_PATTERN__SHORT_FINAL",
+        "SHORT_FINAL__ROLLOUT",
+        "SHORT_FINAL__CLIMBING",
+        "CLIMBING__TRAFFIC_PATTERN",
+        "ROLLOUT__TAXI_BACK",
+        "TAXI_BACK__SHUTDOWN"
+      ]
+    },
+    "emergency": {
+      "label": "Emergency Training",
+      "description": "Practice emergency procedures. Aircraft starts enroute at 5000 feet. Pilot must declare an emergency and coordinate with ATC for priority handling and emergency landing.",
+      "start_state": "CRUISING",
+      "initial_location": "Enroute, 5000 feet",
+      "initial_squawk": "7700",
+      "terminal_states": [
+        "ROLLOUT"
+      ],
+      "allowed_transition_ids": [
+        "ANY__EMERGENCY",
+        "EMERGENCY__SHORT_FINAL",
+        "SHORT_FINAL__ROLLOUT"
+      ]
+    },
+    "traffic_pattern": {
+      "label": "Traffic Pattern Training",
+      "description": "Practice traffic pattern operations. Aircraft starts after takeoff in the climb. Pilot practices pattern entry, landing, and touch-and-go procedures.",
+      "start_state": "HOLD_SHORT",
+      "initial_location": "Holding short runway 27",
+      "initial_squawk": "1200",
+      "terminal_states": [
+        "ROLLOUT"
+      ],
+      "allowed_transition_ids": [
+        "HOLD_SHORT__LINE_UP_AND_WAIT",
+        "LINE_UP_AND_WAIT__CLIMBING",
+        "CLIMBING__TRAFFIC_PATTERN",
+        "TRAFFIC_PATTERN__SHORT_FINAL",
+        "SHORT_FINAL__ROLLOUT",
+        "SHORT_FINAL__CLIMBING"
+      ]
+    },
+    "vfr": {
+      "label": "Full VFR Flight",
+      "description": "Complete VFR flight from startup to shutdown. Practice all phases of flight including ground operations, departure, enroute, approach, and landing. This is the comprehensive training mode covering all ATC communications.",
+      "start_state": "PARKING_STARTUP",
+      "initial_location": "At parking",
+      "initial_squawk": "1200",
+      "terminal_states": [
+        "SHUTDOWN"
+      ],
+      "allowed_transition_ids": [
+        "PARKING_STARTUP__TAXI_OUT",
+        "TAXI_OUT__HOLD_SHORT",
+        "TAXI_OUT__TAXI_BACK",
+        "HOLD_SHORT__LINE_UP_AND_WAIT",
+        "HOLD_SHORT__CLIMBING",
+        "HOLD_SHORT__TAXI_BACK",
+        "LINE_UP_AND_WAIT__CLIMBING",
+        "LINE_UP_AND_WAIT__TAXI_BACK",
+        "CLIMBING__DEPARTURE",
+        "CLIMBING__TRAFFIC_PATTERN",
+        "DEPARTURE__CRUISING",
+        "CRUISING__ARRIVAL",
+        "ARRIVAL__ENTER_AIRSPACE",
+        "ENTER_AIRSPACE__STRAIGHT_IN",
+        "ENTER_AIRSPACE__PATTERN_ENTRY",
+        "ANY__EMERGENCY",
+        "STRAIGHT_IN__SHORT_FINAL",
+        "PATTERN_ENTRY__TRAFFIC_PATTERN",
+        "TRAFFIC_PATTERN__SHORT_FINAL",
+        "SHORT_FINAL__ROLLOUT",
+        "SHORT_FINAL__CLIMBING",
+        "EMERGENCY__SHORT_FINAL",
+        "ROLLOUT__TAXI_BACK",
+        "TAXI_BACK__SHUTDOWN"
+      ]
+    }
+  },
+  "startStates": [
+    "CRUISING",
+    "HOLD_SHORT",
+    "PARKING_STARTUP"
+  ],
+  "terminalStates": [
+    "SHUTDOWN",
+    "ROLLOUT"
+  ],
+  "generatedAt": "2025-12-03T05:11:39.468Z"
+}

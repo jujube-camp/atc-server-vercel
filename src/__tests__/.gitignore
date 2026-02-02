@@ -1,0 +1,7 @@
+# Baseline files - only commit when establishing new baseline
+fixtures/llm-baseline.json
+
+# Test output and artifacts
+*.log
+coverage/
+

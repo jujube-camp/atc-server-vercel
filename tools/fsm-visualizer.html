@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATC FSM Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+      background: #1a1a2e;
+      color: #eee;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    h1 {
+      color: #00d9ff;
+      font-size: 1.5rem;
+      margin-bottom: 5px;
+    }
+    .subtitle {
+      color: #666;
+      font-size: 0.85rem;
+      margin-bottom: 15px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .toolbar button {
+      background: #0f3460;
+      color: #00d9ff;
+      border: 1px solid #00d9ff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    .toolbar button:hover {
+      background: #00d9ff;
+      color: #1a1a2e;
+    }
+    .toolbar select {
+      background: #0f3460;
+      color: #00d9ff;
+      border: 1px solid #00d9ff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+      min-width: 180px;
+    }
+    .toolbar select:hover {
+      background: #1a4080;
+    }
+    .toolbar select option {
+      background: #0f3460;
+      color: #00d9ff;
+    }
+    .toolbar-separator {
+      width: 1px;
+      height: 24px;
+      background: #333;
+    }
+    .toolbar-label {
+      color: #888;
+      font-size: 0.8rem;
+    }
+    .group-filters {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .group-filter {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: opacity 0.2s;
+      user-select: none;
+    }
+    .group-filter:hover { opacity: 0.8; }
+    .group-filter.hidden {
+      opacity: 0.4;
+      text-decoration: line-through;
+    }
+    .group-filter input { cursor: pointer; }
+    .container {
+      display: flex;
+      gap: 20px;
+      height: calc(100vh - 180px);
+    }
+    .graph-panel {
+      flex: 1;
+      background: #16213e;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #cy {
+      width: 100%;
+      height: 100%;
+    }
+    .info-panel {
+      width: 350px;
+      background: #16213e;
+      border-radius: 8px;
+      padding: 15px;
+      overflow-y: auto;
+    }
+    .info-panel h3 {
+      color: #00d9ff;
+      margin: 0 0 10px 0;
+      font-size: 1rem;
+    }
+    .info-content {
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+    .info-content .label {
+      color: #888;
+    }
+    .info-content .value {
+      color: #fff;
+      margin-bottom: 8px;
+      display: block;
+    }
+    .requirements {
+      margin-top: 10px;
+      padding: 8px;
+      background: #0f3460;
+      border-radius: 4px;
+    }
+    .requirements ul {
+      margin: 5px 0 0 0;
+      padding-left: 20px;
+    }
+    .requirements li {
+      color: #aaa;
+      font-size: 0.75rem;
+      margin-bottom: 4px;
+    }
+    .no-selection {
+      color: #666;
+      font-style: italic;
+    }
+    .group-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+    }
+    .mode-info {
+      margin-top: 15px;
+      padding: 10px;
+      background: #0f3460;
+      border-radius: 4px;
+      border-left: 3px solid #00d9ff;
+    }
+    .mode-info .mode-title {
+      color: #00d9ff;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    .mode-info .mode-detail {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 4px;
+      font-size: 0.75rem;
+    }
+    .mode-info .mode-label {
+      color: #888;
+      min-width: 100px;
+    }
+    .mode-info .mode-value {
+      color: #fff;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>🛫 ATC FSM Visualizer</h1>
+  <div class="subtitle" id="subtitle">Loading FSM data...</div>
+  
+  <div class="toolbar">
+    <span class="toolbar-label">Flight Mode:</span>
+    <select id="flight-mode-select" onchange="onFlightModeChange()">
+      <option value="all">All Modes (Full FSM)</option>
+    </select>
+    <div class="toolbar-separator"></div>
+    <button onclick="reloadData()">🔄 Reload Data</button>
+    <button onclick="resetLayout()">📐 Reset Layout</button>
+    <button onclick="fitGraph()">🔍 Fit to View</button>
+    <div class="toolbar-separator"></div>
+    <span class="toolbar-label">Show Groups:</span>
+    <div id="group-filters" class="group-filters"></div>
+  </div>
+
+  <div class="container">
+    <div class="graph-panel">
+      <div id="cy"></div>
+    </div>
+    <div class="info-panel">
+      <h3>Details</h3>
+      <div id="info-content" class="info-content">
+        <span class="no-selection">Click a node or edge to see details</span>
+      </div>
+      <div id="mode-info-panel"></div>
+    </div>
+  </div>
+
+  <script>
+    // Group colors
+    const groupColors = {
+      'Pre-Flight': { bg: '#2d4a7c', border: '#5b8dd9', text: '#8bb8ff' },
+      'Departure': { bg: '#4a2d7c', border: '#8b5bd9', text: '#bb8bff' },
+      'Arrival': { bg: '#7c5b2d', border: '#d9a85b', text: '#ffd88b' },
+      'Emergency': { bg: '#7c2d2d', border: '#d95b5b', text: '#ff8b8b' },
+      'Post-Landing': { bg: '#2d7c4a', border: '#5bd98b', text: '#8bffbb' }
+    };
+
+    // Flight mode display names
+    const flightModeNames = {
+      'vfr': 'VFR (Full Flight)',
+      'traffic_pattern': 'Traffic Pattern',
+      'approach': 'Approach & Landing',
+      'emergency': 'Emergency'
+    };
+
+    // Global state
+    let fsmData = null;
+    let flightModes = {};
+    let selectedFlightMode = 'all';
+    let groups = {};
+    let hiddenGroups = new Set();
+    let cy = null;
+    
+    const infoContent = document.getElementById('info-content');
+    const subtitle = document.getElementById('subtitle');
+    const groupFiltersContainer = document.getElementById('group-filters');
+    const flightModeSelect = document.getElementById('flight-mode-select');
+    const modeInfoPanel = document.getElementById('mode-info-panel');
+
+    // Load precompiled FSM data
+    async function loadVisualizerData() {
+      try {
+        const cacheBuster = `cb=${Date.now()}`;
+        const response = await fetch(`./fsm-visualizer-data.json?${cacheBuster}`);
+        if (!response.ok) throw new Error(`Failed to load data: ${response.status}`);
+        const parsed = await response.json();
+
+        fsmData = {
+          id: parsed.id,
+          version: parsed.version,
+          states: parsed.states || [],
+          transitions: parsed.transitions || [],
+          startStates: parsed.startStates || [],
+          terminalStates: parsed.terminalStates || []
+        };
+
+        // Store flight modes
+        flightModes = parsed.flightModes || {};
+
+        // Build groups
+        groups = {};
+        fsmData.states.forEach(state => {
+          const groupName = state.group || 'Other';
+          if (!groups[groupName]) groups[groupName] = [];
+          groups[groupName].push(state.id);
+        });
+
+        const generatedInfo = parsed.generatedAt
+          ? ` (data generated ${new Date(parsed.generatedAt).toLocaleString()})`
+          : '';
+        subtitle.textContent = `${parsed.id} v${parsed.version}${generatedInfo} — Click nodes or edges for details`;
+        buildFlightModeSelector();
+        buildGroupFilters();
+        updateModeInfoPanel();
+        return true;
+      } catch (error) {
+        console.error('Error:', error);
+        subtitle.innerHTML = `<span style="color: #ff4444;">Error: ${error.message}. Run "pnpm tsx tools/generate-fsm-visualizer-data.ts"</span>`;
+        return false;
+      }
+    }
+
+    // Build flight mode selector options
+    function buildFlightModeSelector() {
+      // Keep the 'all' option
+      flightModeSelect.innerHTML = '<option value="all">All Modes (Full FSM)</option>';
+      
+      // Add each flight mode
+      Object.keys(flightModes).forEach(modeId => {
+        const option = document.createElement('option');
+        option.value = modeId;
+        option.textContent = flightModeNames[modeId] || modeId;
+        flightModeSelect.appendChild(option);
+      });
+      
+      // Restore selected value
+      flightModeSelect.value = selectedFlightMode;
+    }
+
+    // Handle flight mode change
+    function onFlightModeChange() {
+      selectedFlightMode = flightModeSelect.value;
+      updateModeInfoPanel();
+      renderGraph();
+    }
+
+    // Update mode info panel
+    function updateModeInfoPanel() {
+      if (selectedFlightMode === 'all') {
+        modeInfoPanel.innerHTML = '';
+        return;
+      }
+
+      const mode = flightModes[selectedFlightMode];
+      if (!mode) {
+        modeInfoPanel.innerHTML = '';
+        return;
+      }
+
+      const displayName = flightModeNames[selectedFlightMode] || selectedFlightMode;
+      const terminalStates = mode.terminal_states || [];
+      
+      modeInfoPanel.innerHTML = `
+        <div class="mode-info">
+          <div class="mode-title">📋 ${displayName} Mode</div>
+          <div class="mode-detail">
+            <span class="mode-label">Start State:</span>
+            <span class="mode-value">${mode.start_state}</span>
+          </div>
+          <div class="mode-detail">
+            <span class="mode-label">Initial Location:</span>
+            <span class="mode-value">${mode.initial_location || 'Not specified'}</span>
+          </div>
+          <div class="mode-detail">
+            <span class="mode-label">Initial Squawk:</span>
+            <span class="mode-value">${mode.initial_squawk || 'Not specified'}</span>
+          </div>
+          <div class="mode-detail">
+            <span class="mode-label">Terminal States:</span>
+            <span class="mode-value">${terminalStates.join(', ')}</span>
+          </div>
+          <div class="mode-detail">
+            <span class="mode-label">Transitions:</span>
+            <span class="mode-value">${mode.allowed_transition_ids?.length || 0} allowed</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Get allowed transitions for selected mode
+    function getAllowedTransitionIds() {
+      if (selectedFlightMode === 'all') {
+        return null; // null means all transitions
+      }
+      const mode = flightModes[selectedFlightMode];
+      return mode?.allowed_transition_ids || [];
+    }
+
+    // Get states reachable in the selected mode
+    function getStatesInMode() {
+      if (selectedFlightMode === 'all') {
+        return null; // null means all states
+      }
+      
+      const mode = flightModes[selectedFlightMode];
+      if (!mode) return new Set();
+      
+      const states = new Set();
+      states.add(mode.start_state);
+      (mode.terminal_states || []).forEach(s => states.add(s));
+      
+      // Add all states from allowed transitions
+      const allowedTransitionIds = mode.allowed_transition_ids || [];
+      fsmData.transitions.forEach(t => {
+        if (allowedTransitionIds.includes(t.id)) {
+          const froms = Array.isArray(t.from) ? t.from : [t.from];
+          froms.forEach(f => states.add(f));
+          states.add(t.to);
+        }
+      });
+      
+      return states;
+    }
+
+    // Get start/terminal states for current mode
+    function getStartStatesForMode() {
+      if (selectedFlightMode === 'all') {
+        return fsmData.startStates;
+      }
+      const mode = flightModes[selectedFlightMode];
+      return mode?.start_state ? [mode.start_state] : [];
+    }
+
+    function getTerminalStatesForMode() {
+      if (selectedFlightMode === 'all') {
+        return fsmData.terminalStates;
+      }
+      const mode = flightModes[selectedFlightMode];
+      return mode?.terminal_states || [];
+    }
+
+    // Build filter checkboxes
+    function buildGroupFilters() {
+      groupFiltersContainer.innerHTML = '';
+      const groupOrder = ['Pre-Flight', 'Departure', 'Arrival', 'Emergency', 'Post-Landing'];
+      
+      groupOrder.forEach(groupName => {
+        if (!groups[groupName]) return;
+        const colors = groupColors[groupName] || { bg: '#333', text: '#888' };
+        const isHidden = hiddenGroups.has(groupName);
+        
+        const label = document.createElement('label');
+        label.className = `group-filter${isHidden ? ' hidden' : ''}`;
+        label.style.background = colors.bg;
+        label.style.color = colors.text;
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !isHidden;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) {
+            hiddenGroups.delete(groupName);
+            label.classList.remove('hidden');
+          } else {
+            hiddenGroups.add(groupName);
+            label.classList.add('hidden');
+          }
+          renderGraph();
+        });
+        
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(groupName));
+        groupFiltersContainer.appendChild(label);
+      });
+    }
+
+    // Check visibility
+    function isStateVisible(stateId) {
+      const state = fsmData?.states.find(s => s.id === stateId);
+      if (!state) return false;
+      if (hiddenGroups.has(state.group || 'Other')) return false;
+      
+      // Check if state is in the selected flight mode
+      const statesInMode = getStatesInMode();
+      if (statesInMode !== null && !statesInMode.has(stateId)) {
+        return false;
+      }
+      
+      return true;
+    }
+
+    // Check if transition is allowed in current mode
+    function isTransitionAllowed(transitionId) {
+      const allowedIds = getAllowedTransitionIds();
+      if (allowedIds === null) return true; // all mode
+      return allowedIds.includes(transitionId);
+    }
+
+    // Build Cytoscape elements
+    function buildElements() {
+      const elements = [];
+      const startStates = getStartStatesForMode();
+      const terminalStates = getTerminalStatesForMode();
+      
+      // Add nodes
+      fsmData.states.forEach(state => {
+        if (!isStateVisible(state.id)) return;
+        
+        const groupName = state.group || 'Other';
+        const colors = groupColors[groupName] || { bg: '#333', border: '#666', text: '#888' };
+        
+        let shape = 'roundrectangle';
+        if (startStates.includes(state.id)) shape = 'ellipse';
+        else if (terminalStates.includes(state.id)) shape = 'diamond';
+        else if (state.id === 'EMERGENCY') shape = 'hexagon';
+
+        elements.push({
+          data: {
+            id: state.id,
+            label: state.label,
+            group: groupName,
+            description: state.description,
+            stateData: state,
+            bgColor: colors.bg,
+            borderColor: colors.border,
+            textColor: colors.text,
+            isStart: startStates.includes(state.id),
+            isTerminal: terminalStates.includes(state.id)
+          },
+          classes: shape
+        });
+      });
+
+      // Add edges
+      fsmData.transitions.forEach(t => {
+        // Check if transition is allowed in current mode
+        if (!isTransitionAllowed(t.id)) return;
+        
+        const froms = Array.isArray(t.from) ? t.from : [t.from];
+        froms.forEach(from => {
+          if (!isStateVisible(from) || !isStateVisible(t.to)) return;
+          
+          elements.push({
+            data: {
+              id: `${from}-${t.to}`,
+              source: from,
+              target: t.to,
+              transitionData: t
+            }
+          });
+        });
+      });
+
+      return elements;
+    }
+
+    // Render graph
+    function renderGraph() {
+      if (!fsmData) return;
+
+      const elements = buildElements();
+
+      if (cy) {
+        cy.destroy();
+      }
+
+      cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: elements,
+        style: [
+          // Node styles
+          {
+            selector: 'node',
+            style: {
+              'label': 'data(label)',
+              'text-valign': 'center',
+              'text-halign': 'center',
+              'background-color': 'data(bgColor)',
+              'border-color': 'data(borderColor)',
+              'border-width': 2,
+              'color': 'data(textColor)',
+              'font-size': '10px',
+              'font-family': 'SF Mono, Monaco, Consolas, monospace',
+              'width': 120,
+              'height': 45,
+              'text-wrap': 'wrap',
+              'text-max-width': '110px',
+              'padding': '5px'
+            }
+          },
+          {
+            selector: 'node.ellipse',
+            style: { 'shape': 'ellipse' }
+          },
+          {
+            selector: 'node.diamond',
+            style: { 'shape': 'diamond', 'width': 100, 'height': 60 }
+          },
+          {
+            selector: 'node.hexagon',
+            style: { 'shape': 'hexagon' }
+          },
+          {
+            selector: 'node:selected',
+            style: {
+              'border-color': '#00d9ff',
+              'border-width': 4
+            }
+          },
+          // Edge styles
+          {
+            selector: 'edge',
+            style: {
+              'width': 2,
+              'line-color': '#4a5568',
+              'target-arrow-color': '#4a5568',
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier',
+              'arrow-scale': 1.2
+            }
+          },
+          {
+            selector: 'edge:selected',
+            style: {
+              'width': 4,
+              'line-color': '#00d9ff',
+              'target-arrow-color': '#00d9ff'
+            }
+          },
+          {
+            selector: 'edge:active',
+            style: {
+              'width': 4,
+              'line-color': '#00ff00',
+              'target-arrow-color': '#00ff00'
+            }
+          }
+        ],
+        layout: {
+          name: 'dagre',
+          rankDir: 'LR',
+          nodeSep: 50,
+          rankSep: 100,
+          padding: 30
+        },
+        minZoom: 0.3,
+        maxZoom: 3,
+        wheelSensitivity: 0.3
+      });
+
+      // Node click handler
+      cy.on('tap', 'node', function(evt) {
+        const node = evt.target;
+        const stateData = node.data('stateData');
+        if (stateData) {
+          showStateInfo(stateData, node.data('isStart'), node.data('isTerminal'));
+        }
+      });
+
+      // Edge click handler
+      cy.on('tap', 'edge', function(evt) {
+        const edge = evt.target;
+        const transitionData = edge.data('transitionData');
+        if (transitionData) {
+          showTransitionInfo(transitionData);
+          edge.addClass('selected');
+          setTimeout(() => edge.removeClass('selected'), 1000);
+        }
+      });
+
+      // Clear selection on background click
+      cy.on('tap', function(evt) {
+        if (evt.target === cy) {
+          infoContent.innerHTML = '<span class="no-selection">Click a node or edge to see details</span>';
+        }
+      });
+    }
+
+    function resetLayout() {
+      if (cy) {
+        cy.layout({
+          name: 'dagre',
+          rankDir: 'LR',
+          nodeSep: 50,
+          rankSep: 100,
+          padding: 30
+        }).run();
+      }
+    }
+
+    function fitGraph() {
+      if (cy) {
+        cy.fit(50);
+      }
+    }
+
+    // Show state info
+    function showStateInfo(state, isStart, isTerminal) {
+      const isEmergency = state.id === 'EMERGENCY';
+      
+      let typeLabel = 'Normal State';
+      if (isStart) typeLabel = '🟡 Start State';
+      if (isTerminal) typeLabel = '🟢 Terminal State';
+      if (isEmergency) typeLabel = '🔴 Emergency State';
+      if (isStart && isTerminal) typeLabel = '🟡🟢 Start & Terminal State';
+
+      const groupName = state.group || 'Other';
+      const colors = groupColors[groupName] || { bg: '#444', text: '#aaa' };
+
+      infoContent.innerHTML = `
+        <span class="label">State ID:</span>
+        <span class="value" style="font-family: monospace; color: #00d9ff;">${state.id}</span>
+        <span class="label">Label:</span>
+        <span class="value">${state.label}</span>
+        <span class="label">Group:</span>
+        <span class="value">
+          <span class="group-badge" style="background: ${colors.bg}; color: ${colors.text};">${groupName}</span>
+        </span>
+        <span class="label">Type:</span>
+        <span class="value">${typeLabel}</span>
+        <span class="label">Description:</span>
+        <span class="value">${state.description || 'No description'}</span>
+      `;
+    }
+
+    // Show transition info
+    function showTransitionInfo(transition) {
+      const fromStates = Array.isArray(transition.from) ? transition.from.join(', ') : transition.from;
+      
+      let html = `
+        <span class="label">Transition ID:</span>
+        <span class="value" style="font-family: monospace; color: #00d9ff;">${transition.id}</span>
+        <span class="label">From:</span>
+        <span class="value" style="font-family: monospace;">${fromStates}</span>
+        <span class="label">To:</span>
+        <span class="value" style="font-family: monospace;">${transition.to}</span>
+        <span class="label">Description:</span>
+        <span class="value">${transition.description || 'No description'}</span>
+      `;
+
+      if (transition.requirements && transition.requirements.length > 0) {
+        html += `
+          <div class="requirements">
+            <span class="label">Requirements:</span>
+            <ul>
+              ${transition.requirements.map(r => `<li>${r}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+
+      infoContent.innerHTML = html;
+    }
+
+    async function reloadData() {
+      subtitle.textContent = 'Reloading...';
+      if (await loadVisualizerData()) {
+        renderGraph();
+      }
+    }
+
+    // Initialize
+    async function init() {
+      if (await loadVisualizerData()) {
+        renderGraph();
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

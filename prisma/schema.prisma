@@ -1,0 +1,389 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String         @id @default(cuid())
+  email                   String         @unique
+  passwordHash            String?
+  displayName             String?
+  username                String?
+  appleId                 String?        @unique
+  avatarUrl               String?        @map("avatar_url") @db.Text
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  refreshToken            String?        @unique
+  refreshTokenExpiresAt   DateTime?
+  hasCompletedCockpitTour Boolean        @default(false) @map("has_completed_cockpit_tour")
+  activeDeviceId          String?        @map("active_device_id")
+  activeDeviceName        String?        @map("active_device_name")
+  activeDeviceUpdatedAt   DateTime?      @map("active_device_updated_at")
+  pushToken               String?        @map("push_token")
+  sessions                Session[]
+  authSessions            AuthSession[]
+  referralCode            String?        @unique @map("referral_code")
+  referredByReferralId    String?        @map("referred_by_referral_id")
+  referralCodeRecord      ReferralCode?  @relation("UserReferralCode")
+  favoriteFeeds           FavoriteFeed[]
+  feedbacks               Feedback[]
+  recordings              Recording[]
+  membership              Membership?
+
+  @@index([activeDeviceId])
+  @@index([pushToken])
+  @@map("users")
+}
+
+model Session {
+  airportIcao          String
+  arrivalAirport       String?             @map("arrival_airport")
+  activeAirportIcao    String?             @map("active_airport_icao")
+  aircraftTailNumber   String
+  aircraftType         String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  currentPhaseName     String
+  id                   String              @id @default(cuid())
+  userId               String?
+  previous_response_id String?
+  currentLocation      String?
+  trainingMode         String?
+  radioFrequency1      String?
+  squawk               String?
+  phaseAdvanceEvents   PhaseAdvanceEvent[]
+  locationEvents       LocationEvent[]
+  user                 User?               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transmissionEvents   TransmissionEvent[]
+  sessionState         SessionState?
+
+  @@map("sessions")
+}
+
+model TransmissionEvent {
+  id               String      @id @default(cuid())
+  sessionId        String
+  sender           String
+  current_phase    String
+  audio_url        String?
+  audio_transcript String?
+  metadata         String      @default("{}")
+  createdAt        DateTime    @default(now())
+  evaluation       Evaluation?
+  session          Session     @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+  @@map("transmission_events")
+}
+
+model PhaseAdvanceEvent {
+  id         String   @id @default(cuid())
+  sessionId  String
+  from_phase String
+  to_phase   String
+  envData    Json     @default("{}") @map("env_data")
+  createdAt  DateTime @default(now())
+  session    Session  @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+  @@map("phase_advance_events")
+}
+
+model Evaluation {
+  id                  String            @id @default(cuid())
+  transmissionEventId String            @unique
+  score               Int?
+  feedback            String?
+  exampleAnswer       String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  transmissionEvent   TransmissionEvent @relation(fields: [transmissionEventId], references: [id])
+
+  @@map("evaluations")
+}
+
+enum EventSender {
+  PILOT
+  ATC
+}
+
+model ReferralCode {
+  id          String   @id @default(cuid())
+  ownerUserId String   @unique @map("owner_user_id")
+  code        String   @unique @map("referral_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  owner User @relation("UserReferralCode", fields: [ownerUserId], references: [id])
+
+  @@map("referral_codes")
+}
+
+model LocationEvent {
+  id        String   @id @default(cuid())
+  sessionId String
+  location  String
+  phase     String
+  createdAt DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+  @@map("location_events")
+}
+
+model Airport {
+  id               String   @id @default(cuid())
+  ident            String
+  type             String
+  name             String
+  latitudeDeg      Float?   @map("latitude_deg")
+  longitudeDeg     Float?   @map("longitude_deg")
+  elevationFt      String?  @map("elevation_ft")
+  continent        String
+  isoCountry       String   @map("iso_country")
+  isoRegion        String   @map("iso_region")
+  municipality     String?
+  scheduledService String?  @map("scheduled_service")
+  icaoCode         String?  @unique @map("icao_code")
+  iataCode         String?  @map("iata_code")
+  gpsCode          String?  @map("gps_code")
+  localCode        String?  @map("local_code")
+  jsonData         String?  @map("json_data") @db.Text
+  hasFreqs         Int?     @default(0) @map("has_freqs")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([icaoCode])
+  @@index([isoCountry])
+  @@map("airports")
+}
+
+model FavoriteFeed {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  feedId    String   @map("feed_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, feedId])
+  @@index([userId])
+  @@index([feedId])
+  @@map("favorite_feeds")
+}
+
+model Feedback {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  message    String
+  category   String?
+  contact    String?
+  platform   String?
+  appVersion String?  @map("app_version")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("feedback")
+}
+
+model LiveATCFeed {
+  id        String   @id @default(cuid())
+  mount     String
+  name      String
+  icao      String
+  plsUrl    String   @map("pls_url") @db.Text
+  streamUrl String?  @map("stream_url") @db.Text
+  isFree    Boolean  @default(false) @map("is_free")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([icao, mount])
+  @@index([icao])
+  @@index([mount])
+  @@map("liveatc_feeds")
+}
+
+model TrainingModeConfig {
+  id                   String   @id @default(cuid())
+  trainingMode         String   @unique @map("training_mode")
+  label                String
+  description          String?  @db.Text
+  imageUrl             String   @map("image_url") @db.Text
+  displayOrder         Int      @default(0) @map("display_order")
+  showDepartureAirport Boolean  @default(true) @map("show_departure_airport")
+  showArrivalAirport   Boolean  @default(false) @map("show_arrival_airport")
+  showAircraftType     Boolean  @default(false) @map("show_aircraft_type")
+  showTailNumber       Boolean  @default(true) @map("show_tail_number")
+  initRadioType        String?  @map("init_radio_type")
+  isFree               Boolean  @default(false) @map("is_free")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("training_mode_configs")
+}
+
+model AircraftType {
+  id           String   @id @default(cuid())
+  value        String   @unique
+  label        String
+  category     String?
+  description  String?  @db.Text
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("aircraft_types")
+}
+
+model SessionState {
+  sessionId String   @id
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("session_states")
+}
+
+model Recording {
+  id            String  @id @default(cuid())
+  userId        String  @map("user_id")
+  sessionId     String  @unique @map("session_id")
+  audioS3Key    String? @map("audio_s3_key")
+  audioUrl      String? @map("audio_url") @db.Text
+  jobId         String? @map("job_id")
+  status        String  @default("idle") // idle, recording, stopped, uploading, uploaded, analyzing, completed, failed
+  reportS3Key   String? @map("report_s3_key")
+  reportUrl     String? @map("report_url") @db.Text
+  summaryS3Key  String? @map("summary_s3_key")
+  summaryUrl    String? @map("summary_url") @db.Text
+  timelineS3Key String? @map("timeline_s3_key")
+  timelineUrl   String? @map("timeline_url") @db.Text
+  errorMessage  String? @map("error_message") @db.Text
+
+  // Flight data (compact JSON uploaded to S3)
+  flightDataS3Key String? @map("flight_data_s3_key")
+  flightDataUrl   String? @map("flight_data_url") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@map("recordings")
+}
+
+enum MembershipTier {
+  FREE
+  PREMIUM
+}
+
+model Membership {
+  id          String         @id @default(cuid())
+  userId      String         @unique @map("user_id")
+  tier        MembershipTier @default(FREE)
+  expiresAt   DateTime?      @map("expires_at")
+  lastResetAt DateTime?      @map("last_reset_at") // Last time usage was reset
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments    Payment[]
+
+  @@index([userId])
+  @@map("memberships")
+}
+
+model MembershipPlan {
+  id               String         @id @default(cuid())
+  tier             MembershipTier @unique
+  monthlyPrice     Float          @map("monthly_price")
+  yearlyPrice      Float          @map("yearly_price")
+  yearlyDiscount   Float          @map("yearly_discount") // e.g., 0.2 for 20% discount
+  monthlyProductId String         @map("monthly_product_id")
+  yearlyProductId  String         @map("yearly_product_id")
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@map("membership_plans")
+}
+
+model Payment {
+  id                    String         @id @default(cuid())
+  userId                String         @map("user_id")
+  membershipId          String         @map("membership_id")
+  transactionId         String         @unique @map("transaction_id")
+  originalTransactionId String         @map("original_transaction_id")
+  productId             String         @map("product_id")
+  tier                  MembershipTier
+  amount                Float
+  currency              String         @default("USD")
+  status                String // pending, completed, failed, refunded
+  receiptData           String?        @map("receipt_data") @db.Text
+  deviceId              String?        @map("device_id")
+  deviceName            String?        @map("device_name")
+  deviceModel           String?        @map("device_model")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  membership            Membership     @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([transactionId])
+  @@index([originalTransactionId])
+  @@index([membershipId])
+  @@map("payments")
+}
+
+model UsageRecord {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  usageType String   @map("usage_type") // 'training_session' or 'recording_upload'
+  month     Int // 1-12
+  year      Int // e.g., 2024
+  count     Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, usageType, month, year])
+  @@index([userId, usageType, month, year])
+  @@map("usage_records")
+}
+
+model AuthSession {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  deviceId              String    @map("device_id")
+  deviceName            String?   @map("device_name")
+  deviceModel           String?   @map("device_model")
+  isActive              Boolean   @default(true) @map("is_active")
+  refreshToken          String?   @map("refresh_token")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  lastActiveAt          DateTime  @default(now()) @map("last_active_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([isActive])
+  @@index([refreshToken])
+  @@map("auth_sessions")
+}
+
+model TierLimitConfig {
+  id                   String         @id @default(cuid())
+  tier                 MembershipTier @unique
+  maxTrainingSessions  Int?           @map("max_training_sessions") // null means unlimited
+  maxRecordingAnalyses Int?           @map("max_recording_analyses") // null means unlimited
+  description          String?        @db.Text
+  isActive             Boolean        @default(true) @map("is_active")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  @@map("tier_limit_configs")
+}

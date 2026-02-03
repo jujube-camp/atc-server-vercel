@@ -56,8 +56,10 @@ async function buildServer() {
 
   // Register plugins
   await server.register(helmet);
+  // Allow CORS from Expo/mobile (origin may be null or custom scheme); on Vercel accept requests so app can connect
+  const allowCors = env.NODE_ENV === 'development' || env.VERCEL === '1';
   await server.register(cors, {
-    origin: env.NODE_ENV === 'development' ? '*' : false, // Configure for production
+    origin: allowCors ? true : false, // true = reflect request origin (allows mobile app)
   });
   await server.register(rateLimit, {
     max: 5000,

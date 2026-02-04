@@ -49,3 +49,4 @@ scripts/**/*.map
 !scripts/test_tts.js
 arcadea-server-key.pem
 .vercel
+.env*.local

@@ -23,18 +23,19 @@ echo ""
 echo "---"
 echo ""
 
-# Test 2: V1 format (with password)
+# Test 2: V1 format (with password). Use APPLE_SHARED_SECRET from env if set to test V1 auth.
 echo "Test 2: Sending V1 webhook (unified_receipt format)"
-echo "Expected: 401 Unauthorized (wrong password) or 200 OK (correct password)"
+echo "Expected: 200 OK (server always returns 200; check logs for auth success or 'No receipt info')"
 echo ""
 
+PASSWORD="${APPLE_SHARED_SECRET:-wrong_password}"
 curl -X POST http://localhost:3000/api/v1/webhooks/apple \
   -H "Content-Type: application/json" \
-  -d '{
-    "notification_type": "TEST",
-    "password": "wrong_password",
-    "environment": "Sandbox"
-  }' \
+  -d "{
+    \"notification_type\": \"TEST\",
+    \"password\": \"$PASSWORD\",
+    \"environment\": \"Sandbox\"
+  }" \
   -w "\nHTTP Status: %{http_code}\n" \
   -s
 
@@ -45,8 +46,8 @@ echo ""
 echo "✅ Test complete!"
 echo ""
 echo "Check server logs for:"
-echo "  - [AppleWebhook] 🔔 Incoming webhook notification"
-echo "  - [AppleWebhook] 📦 Processing V2 notification (for Test 1)"
-echo "  - [AppleWebhook] 📦 Processing V1 notification (for Test 2)"
+echo "  - [AppleWebhook] 📨 Raw webhook request received"
+echo "  - Test 1: V2 decode (will fail on invalid JWT; that's expected)"
+echo "  - Test 2: V1 auth (if APPLE_SHARED_SECRET is set: 'V1 Notification authenticated'; then 'No receipt info')"
 echo ""
-echo "For real testing, wait for Apple to send actual webhooks after purchase."
+echo "To receive real webhooks locally, use ngrok (see APPLE_IAP_SETUP.md)."

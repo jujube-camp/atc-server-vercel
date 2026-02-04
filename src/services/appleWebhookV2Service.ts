@@ -10,31 +10,31 @@ import https from 'https';
  * V2 uses JWT signedPayload instead of the old unified_receipt format
  */
 export class AppleWebhookV2Service {
-  private static verifier: SignedDataVerifier | null = null;
+  private static verifierProduction: SignedDataVerifier | null = null;
+  private static verifierSandbox: SignedDataVerifier | null = null;
 
   /**
-   * Initialize the verifier with Apple's root certificates
+   * Get or create a verifier for the given environment.
+   * We cache both PRODUCTION and SANDBOX verifiers so one webhook URL can receive both sandbox and production notifications.
    */
-  private static async initVerifier(): Promise<SignedDataVerifier> {
-    if (this.verifier) {
-      return this.verifier;
-    }
+  private static async getVerifier(environment: Environment): Promise<SignedDataVerifier> {
+    const cache = environment === Environment.PRODUCTION ? this.verifierProduction : this.verifierSandbox;
+    if (cache) return cache;
 
-    // Download Apple Root CA-G3 certificate
     const appleRootCA = await this.downloadAppleRootCertificate();
-    
-    // Determine environment based on NODE_ENV
-    const environment = env.NODE_ENV === 'production' ? Environment.PRODUCTION : Environment.SANDBOX;
     const bundleId = env.APPLE_CLIENT_ID || 'com.jujubecamp.aviateai';
-    
-    this.verifier = new SignedDataVerifier(
+    const verifier = new SignedDataVerifier(
       [appleRootCA],
-      true, // Enable online checks
+      true,
       environment,
       bundleId
     );
-    
-    return this.verifier;
+    if (environment === Environment.PRODUCTION) {
+      this.verifierProduction = verifier;
+    } else {
+      this.verifierSandbox = verifier;
+    }
+    return verifier;
   }
 
   /**
@@ -52,18 +52,24 @@ export class AppleWebhookV2Service {
   }
 
   /**
-   * Handle V2 webhook notification with signedPayload
+   * Handle V2 webhook notification with signedPayload.
+   * Tries PRODUCTION verifier first, then SANDBOX, so one URL can receive both sandbox and production notifications.
    */
   static async handleV2Notification(
     signedPayload: string,
     logger: FastifyBaseLogger
   ): Promise<void> {
+    let decodedPayload: ResponseBodyV2DecodedPayload;
     try {
       logger.info('[AppleWebhookV2] 🔓 Decoding signedPayload...');
-      
-      const verifier = await this.initVerifier();
-      const decodedPayload = await verifier.verifyAndDecodeNotification(signedPayload);
-      
+      const prodVerifier = await this.getVerifier(Environment.PRODUCTION);
+      try {
+        decodedPayload = await prodVerifier.verifyAndDecodeNotification(signedPayload);
+      } catch (prodErr) {
+        logger.info('[AppleWebhookV2] Production verifier failed, trying Sandbox...');
+        const sandboxVerifier = await this.getVerifier(Environment.SANDBOX);
+        decodedPayload = await sandboxVerifier.verifyAndDecodeNotification(signedPayload);
+      }
       logger.info(
         {
           notificationType: decodedPayload.notificationType,
@@ -72,7 +78,6 @@ export class AppleWebhookV2Service {
         },
         '[AppleWebhookV2] ✅ Payload decoded successfully'
       );
-
       await this.processV2Notification(decodedPayload, logger);
     } catch (error) {
       logger.error(
@@ -119,7 +124,8 @@ export class AppleWebhookV2Service {
       return;
     }
 
-    const verifier = await this.initVerifier();
+    const env = payload.data?.environment === 'Production' ? Environment.PRODUCTION : Environment.SANDBOX;
+    const verifier = await this.getVerifier(env);
     const transactionInfo = await verifier.verifyAndDecodeTransaction(signedTransactionInfo);
 
     logger.info(

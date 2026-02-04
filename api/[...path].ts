@@ -13,6 +13,11 @@ async function getApp(): Promise<FastifyInstance> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  // Vercel may pass the path relative to /api (e.g. /v1/auth/login). Fastify expects /api/v1/...
+  const url = req.url ?? '/';
+  if (!url.startsWith('/api')) {
+    req.url = url.startsWith('/') ? `/api${url}` : `/api/${url}`;
+  }
   const fastify = await getApp();
   await fastify.ready();
   const nodeServer = (fastify as unknown as { server: NodeJS.HttpServer }).server;

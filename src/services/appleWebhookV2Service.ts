@@ -24,11 +24,15 @@ export class AppleWebhookV2Service {
 
     const appleRootCA = await this.downloadAppleRootCertificate();
     const bundleId = env.APPLE_CLIENT_ID || 'com.jujubecamp.aviateai';
+    // appAppleId is required for Production environment verification
+    // Get it from App Store Connect -> App Information -> Apple ID
+    const appAppleId = env.APPLE_APP_ID ? Number(env.APPLE_APP_ID) : undefined;
     const verifier = new SignedDataVerifier(
       [appleRootCA],
       true,
       environment,
-      bundleId
+      bundleId,
+      appAppleId
     );
     if (environment === Environment.PRODUCTION) {
       this.verifierProduction = verifier;

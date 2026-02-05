@@ -29,6 +29,7 @@ const envSchema = z.object({
   HTTP_PROXY: z.string().optional(),
   PROXY: z.string().optional(),
   APPLE_CLIENT_ID: z.string().optional(),
+  APPLE_APP_ID: z.string().optional(), // App Store Connect App ID (numeric) - required for webhook verification
   APPLE_SHARED_SECRET: z.string().optional(), // For App Store receipt verification
   AWS_REGION: z.string().optional(),
   AWS_S3_AUDIO_BUCKET: z.string().optional(),

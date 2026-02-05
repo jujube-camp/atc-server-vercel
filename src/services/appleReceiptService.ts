@@ -50,7 +50,7 @@ export class AppleReceiptService {
   private static readonly PRODUCTION_URL = 'https://buy.itunes.apple.com/verifyReceipt';
   private static readonly SANDBOX_URL = 'https://sandbox.itunes.apple.com/verifyReceipt';
   
-  private static readonly MAX_RETRIES = 3;
+  private static readonly MAX_RETRIES = 2; // 1 retry after initial attempt
   private static readonly RETRY_DELAY_MS = 1000;
 
   /**
@@ -80,12 +80,22 @@ export class AppleReceiptService {
       throw new Error('APPLE_SHARED_SECRET not configured');
     }
 
+    logger.info(
+      { receiptDataLength: receiptData.length },
+      '[AppleReceipt] Starting receipt verification'
+    );
+
     let lastError: Error | null = null;
     let useSandbox = false;
 
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const url = useSandbox ? this.SANDBOX_URL : this.PRODUCTION_URL;
+        logger.info(
+          { attempt, maxRetries: this.MAX_RETRIES, environment: useSandbox ? 'sandbox' : 'production' },
+          '[AppleReceipt] Verification attempt'
+        );
+        
         const response = await this.sendVerificationRequest(
           url,
           receiptData,
@@ -95,14 +105,14 @@ export class AppleReceiptService {
 
         // If status is 21007, receipt is from sandbox, switch to sandbox URL and retry
         if (response.status === 21007) {
-          logger.info('[AppleReceipt] Receipt is from sandbox, retrying with sandbox URL');
+          logger.info('[AppleReceipt] Receipt is from sandbox, switching to sandbox URL');
           useSandbox = true;
           continue;
         }
 
         // If status is 21008, receipt is from production but sent to sandbox (shouldn't happen with our flow)
         if (response.status === 21008) {
-          logger.info('[AppleReceipt] Receipt is from production, retrying with production URL');
+          logger.info('[AppleReceipt] Receipt is from production, switching to production URL');
           useSandbox = false;
           continue;
         }
@@ -110,27 +120,43 @@ export class AppleReceiptService {
         // If retryable error (21100-21199), wait and retry
         if (this.isRetryableStatus(response.status)) {
           logger.warn(
-            { status: response.status, attempt, maxRetries: this.MAX_RETRIES },
-            '[AppleReceipt] Retryable error from Apple, will retry'
+            { status: response.status, attempt, maxRetries: this.MAX_RETRIES, statusMessage: this.getStatusMessage(response.status) },
+            '[AppleReceipt] Retryable error from Apple'
           );
           if (attempt < this.MAX_RETRIES) {
-            await this.sleep(this.RETRY_DELAY_MS * attempt);
+            const delayMs = this.RETRY_DELAY_MS * attempt;
+            logger.info({ delayMs }, '[AppleReceipt] Waiting before retry');
+            await this.sleep(delayMs);
             continue;
           }
           // Last attempt failed with retryable error
+          logger.error(
+            { status: response.status, attempts: attempt },
+            '[AppleReceipt] All retry attempts exhausted'
+          );
           throw new Error(`Apple server temporarily unavailable (status ${response.status}). Please try again.`);
         }
 
+        logger.info('[AppleReceipt] Parsing verification response');
         return this.parseVerificationResponse(response, logger);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        if (attempt < this.MAX_RETRIES && !lastError.message.includes('Invalid receipt')) {
+        const isInvalidReceipt = lastError.message.includes('Invalid receipt') || 
+                                  lastError.message.includes('malformed') ||
+                                  lastError.message.includes('could not be authenticated');
+        
+        if (attempt < this.MAX_RETRIES && !isInvalidReceipt) {
+          const delayMs = this.RETRY_DELAY_MS * attempt;
           logger.warn(
-            { error: lastError.message, attempt, maxRetries: this.MAX_RETRIES },
-            '[AppleReceipt] Verification attempt failed, retrying'
+            { error: lastError.message, attempt, maxRetries: this.MAX_RETRIES, delayMs },
+            '[AppleReceipt] Verification attempt failed, will retry'
           );
-          await this.sleep(this.RETRY_DELAY_MS * attempt);
+          await this.sleep(delayMs);
         } else {
+          logger.error(
+            { error: lastError.message, attempt, isInvalidReceipt },
+            '[AppleReceipt] Verification failed (no more retries)'
+          );
           throw lastError;
         }
       }
@@ -148,7 +174,14 @@ export class AppleReceiptService {
     password: string,
     logger: FastifyBaseLogger
   ): Promise<AppleReceiptVerificationResponse> {
+    const isSandbox = url.includes('sandbox');
+    logger.info(
+      { url: isSandbox ? 'sandbox' : 'production', receiptDataLength: receiptData.length },
+      '[AppleReceipt] Sending verification request to Apple'
+    );
+    
     try {
+      const startTime = Date.now();
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -160,17 +193,38 @@ export class AppleReceiptService {
           'exclude-old-transactions': true,
         }),
       });
+      const duration = Date.now() - startTime;
 
       if (!response.ok) {
+        logger.error(
+          { httpStatus: response.status, statusText: response.statusText, duration },
+          '[AppleReceipt] Apple API HTTP error'
+        );
         throw new Error(`Apple API returned ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json() as AppleReceiptVerificationResponse;
-      logger.info({ status: data.status, environment: data.environment }, '[AppleReceipt] Verification response');
+      logger.info(
+        { 
+          status: data.status, 
+          environment: data.environment,
+          duration,
+          hasLatestReceiptInfo: !!data.latest_receipt_info?.length,
+          latestReceiptInfoCount: data.latest_receipt_info?.length ?? 0,
+          inAppCount: data.receipt?.in_app?.length ?? 0,
+        },
+        '[AppleReceipt] Verification response received'
+      );
       
       return data;
     } catch (error) {
-      logger.error({ error, url }, '[AppleReceipt] Failed to verify receipt');
+      logger.error(
+        { 
+          error: error instanceof Error ? error.message : String(error), 
+          url: isSandbox ? 'sandbox' : 'production' 
+        },
+        '[AppleReceipt] Failed to verify receipt'
+      );
       throw new Error('Failed to communicate with Apple verification server');
     }
   }

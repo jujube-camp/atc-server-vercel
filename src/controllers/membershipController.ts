@@ -1,8 +1,8 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { MembershipService, MembershipTier } from '../services/membershipService.js';
 import { AppleReceiptService } from '../services/appleReceiptService.js';
-import { PushNotificationService } from '../services/pushNotificationService.js';
-import { prisma } from '../utils/prisma.js';
+import { AppConfigService } from '../services/appConfigService.js';
+import { PRODUCT_ID_TO_TIER, getPriceByBillingPeriod, DEFAULT_CURRENCY, SUPPORTED_PRODUCT_IDS } from '../config/pricing.js';
 
 export class MembershipController {
   /**
@@ -12,7 +12,10 @@ export class MembershipController {
    */
   static async getMembership(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const userId = (request.user as any)?.userId;
-    
+
+    // Get payment mode from config
+    const paymentMode = await AppConfigService.getPaymentMode(request.server.log);
+
     // If not authenticated, return default FREE tier
     if (!userId) {
       return reply.send({
@@ -30,9 +33,11 @@ export class MembershipController {
           trainingSessionsResetAt: null,
           recordingAnalysesResetAt: null,
         },
+        paymentMode,
+        requiresSubscription: false,
       });
     }
-    
+
     const membership = await MembershipService.getMembership(userId, request.server.log);
     const limits = await MembershipService.getUsageLimits(userId);
 
@@ -51,14 +56,21 @@ export class MembershipController {
       }
     }
 
+    // In PAYWALL mode, user must have an active premium subscription to use the app
+    const isActive = MembershipService.isMembershipActive(membership);
+    const requiresSubscription = paymentMode === 'PAYWALL' &&
+      (membership.tier === MembershipTier.FREE || !isActive);
+
     reply.send({
       membership: {
         tier: membership.tier,
         expiresAt: membership.expiresAt,
-        isActive: MembershipService.isMembershipActive(membership),
+        isActive,
         subscriptionType,
       },
       limits,
+      paymentMode,
+      requiresSubscription,
     });
   }
 
@@ -100,18 +112,13 @@ export class MembershipController {
       return reply.code(400).send({ error: 'Device ID is required' });
     }
 
-    // Map product IDs to tiers (support both monthly and yearly)
-    const productIdToTier: Record<string, MembershipTier> = {
-      'com.aviateai.premium.monthly': MembershipTier.PREMIUM,
-      'com.aviateai.premium.yearly': MembershipTier.PREMIUM,
-      // Legacy product IDs for backwards compatibility
-      'com.aviateai.golden.monthly': MembershipTier.PREMIUM,
-      'com.aviateai.golden.yearly': MembershipTier.PREMIUM,
-    };
-
-    const tier = productIdToTier[productId];
+    // Map product IDs to tiers using centralized config
+    const tier = PRODUCT_ID_TO_TIER[productId];
     if (!tier) {
-      return reply.code(400).send({ error: 'Invalid product ID' });
+      return reply.code(400).send({
+        error: 'Invalid product ID',
+        supportedProductIds: SUPPORTED_PRODUCT_IDS,
+      });
     }
 
     try {
@@ -261,9 +268,8 @@ export class MembershipController {
         });
       }
 
-      // Calculate price based on product ID (for logging)
-      const isYearly = productId.includes('.yearly');
-      const amount = isYearly ? 69.99 : 14.99;
+      // Calculate price based on product ID using centralized config
+      const amount = getPriceByBillingPeriod(productId);
 
       // Use the transaction ID from Apple's receipt (not the client's)
       // This ensures consistency with Apple's records
@@ -286,7 +292,7 @@ export class MembershipController {
         productId,
         tier,
         amount,
-        'USD',
+        DEFAULT_CURRENCY,
         'completed',
         receiptData,
         verifiedReceipt.expiresDate || null,
@@ -466,17 +472,13 @@ export class MembershipController {
         });
       }
 
-      // Map product ID to tier
-      const productIdToTier: Record<string, MembershipTier> = {
-        'com.aviateai.premium.monthly': MembershipTier.PREMIUM,
-        'com.aviateai.premium.yearly': MembershipTier.PREMIUM,
-        'com.aviateai.golden.monthly': MembershipTier.PREMIUM,
-        'com.aviateai.golden.yearly': MembershipTier.PREMIUM,
-      };
-
-      const tier = productIdToTier[verifiedReceipt.productId];
+      // Map product ID to tier using centralized config
+      const tier = PRODUCT_ID_TO_TIER[verifiedReceipt.productId];
       if (!tier) {
-        return reply.code(400).send({ error: 'Unknown product ID' });
+        return reply.code(400).send({
+          error: 'Unknown product ID',
+          supportedProductIds: SUPPORTED_PRODUCT_IDS,
+        });
       }
 
       // Check if original_transaction_id is already bound to another user
@@ -498,40 +500,7 @@ export class MembershipController {
         });
       }
 
-      // Get user's current active device
-      const user = await MembershipService.getUserById(userId);
-
-      // If switching devices, invalidate old device sessions and send notification
-      if (user && user.activeDeviceId && user.activeDeviceId !== deviceId) {
-        // Deactivate all sessions on the old device
-        await prisma.authSession.updateMany({
-          where: {
-            userId,
-            deviceId: user.activeDeviceId,
-            isActive: true,
-          },
-          data: {
-            isActive: false,
-          },
-        });
-
-        request.server.log.info(
-          { 
-            userId, 
-            oldDeviceId: user.activeDeviceId, 
-            newDeviceId: deviceId 
-          },
-          '[MembershipController] Deactivated sessions on old device due to device switch'
-        );
-
-        // Send push notification to old device
-        await PushNotificationService.sendSessionInvalidatedNotification(
-          userId,
-          user.activeDeviceId,
-          deviceName,
-          request.server.log
-        );
-      }
+      // Note: multi-device access is allowed. Do not invalidate other sessions.
 
       // Security: Check if this transaction already belongs to another user
       // This prevents users from restoring purchases made by other accounts on the same device
@@ -575,8 +544,7 @@ export class MembershipController {
           '[MembershipController] First time processing this transaction - recording payment'
         );
 
-        const isYearly = verifiedReceipt.productId.includes('.yearly');
-        const amount = isYearly ? 69.99 : 14.99;
+        const amount = getPriceByBillingPeriod(verifiedReceipt.productId);
 
         await MembershipService.recordPayment(
           userId,
@@ -585,7 +553,7 @@ export class MembershipController {
           verifiedReceipt.productId,
           tier,
           amount,
-          'USD',
+          DEFAULT_CURRENCY,
           'completed',
           receiptData,
           verifiedReceipt.expiresDate || null,

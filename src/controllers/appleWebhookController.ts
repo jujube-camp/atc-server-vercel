@@ -3,6 +3,7 @@ import { MembershipService, MembershipTier } from '../services/membershipService
 import { AppleWebhookV2Service } from '../services/appleWebhookV2Service.js';
 import { prisma } from '../utils/prisma.js';
 import { env } from '../config/env.js';
+import { PRODUCT_ID_TO_TIER, SUPPORTED_PRODUCT_IDS } from '../config/pricing.js';
 
 // V2 Notification format (JWT-based)
 interface AppleServerNotificationV2 {
@@ -38,6 +39,7 @@ export class AppleWebhookController {
     
     // Detect V2 format (has signedPayload)
     const isV2 = 'signedPayload' in notification && typeof notification.signedPayload === 'string';
+    let eventId: string | null = null;
     
     request.server.log.info(
       { 
@@ -51,13 +53,31 @@ export class AppleWebhookController {
 
     try {
       const startTime = Date.now();
+
+      // Record webhook event (best-effort, non-blocking)
+      try {
+        const created = await (prisma as any).appleWebhookEvent.create({
+          data: {
+            version: isV2 ? 'V2' : 'V1',
+            notificationType: isV2 ? null : (notification as AppleServerNotificationV1).notification_type ?? null,
+            environment: isV2 ? null : (notification as AppleServerNotificationV1).environment ?? null,
+            signedPayload: isV2 ? (notification as AppleServerNotificationV2).signedPayload : null,
+            payload: notification as any,
+            status: 'received',
+          },
+        });
+        eventId = created.id;
+      } catch (error) {
+        request.server.log.warn({ error }, '[AppleWebhook] Failed to record webhook event');
+      }
       
       if (isV2) {
         // Handle V2 format (JWT-based)
         request.server.log.info('[AppleWebhook] 📦 Processing V2 notification (signedPayload)');
         await AppleWebhookV2Service.handleV2Notification(
           (notification as AppleServerNotificationV2).signedPayload,
-          request.server.log
+          request.server.log,
+          eventId ?? undefined
         );
       } else {
         // Handle V1 format (legacy unified_receipt)
@@ -73,6 +93,16 @@ export class AppleWebhookController {
         },
         '[AppleWebhook] ✅ Notification processed successfully'
       );
+
+      if (eventId) {
+        await (prisma as any).appleWebhookEvent.update({
+          where: { id: eventId },
+          data: {
+            status: 'processed',
+            processedAt: new Date(),
+          },
+        });
+      }
       
       reply.code(200).send({ status: 'ok' });
     } catch (error) {
@@ -86,6 +116,16 @@ export class AppleWebhookController {
         }, 
         '[AppleWebhook] ❌ Failed to process notification'
       );
+      if (eventId) {
+        await (prisma as any).appleWebhookEvent.update({
+          where: { id: eventId },
+          data: {
+            status: 'error',
+            errorMessage: error instanceof Error ? error.message : String(error),
+            processedAt: new Date(),
+          },
+        });
+      }
       // Still return 200 to prevent Apple from retrying
       reply.code(200).send({ status: 'error' });
     }
@@ -216,22 +256,15 @@ export class AppleWebhookController {
       '[AppleWebhook] ✅ Found payment record for user'
     );
     
-    // Map product ID to tier
-    const productIdToTier: Record<string, MembershipTier> = {
-      'com.aviateai.premium.monthly': MembershipTier.PREMIUM,
-      'com.aviateai.premium.yearly': MembershipTier.PREMIUM,
-      'com.aviateai.golden.monthly': MembershipTier.PREMIUM,
-      'com.aviateai.golden.yearly': MembershipTier.PREMIUM,
-    };
-
-    const tier = productIdToTier[productId];
+    // Map product ID to tier using centralized config
+    const tier = PRODUCT_ID_TO_TIER[productId];
     if (!tier) {
       logger.warn(
-        { 
+        {
           productId,
           userId,
-          supportedProductIds: Object.keys(productIdToTier),
-        }, 
+          supportedProductIds: SUPPORTED_PRODUCT_IDS,
+        },
         '[AppleWebhook] ⚠️ Unknown product ID'
       );
       return;

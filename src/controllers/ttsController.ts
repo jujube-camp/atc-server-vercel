@@ -12,13 +12,14 @@ export class TTSController {
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> {
-    const { 
-      text, 
+    const {
+      text,
       format = 'mp3',
       reference_id,
       latency = 'normal',
       session_id,
-      transmission_id
+      transmission_id,
+      radioEffects,
     } = request.query as {
       text?: string;
       format?: 'wav' | 'pcm' | 'mp3' | 'opus';
@@ -26,6 +27,7 @@ export class TTSController {
       latency?: 'normal' | 'balanced';
       session_id?: string;
       transmission_id?: string;
+      radioEffects?: 'standard' | 'light' | 'heavy' | 'clear';
     };
 
     if (!text) {
@@ -56,6 +58,7 @@ export class TTSController {
         format,
         latency,
         reference_id: reference_id || env.FISH_AUDIO_REFERENCE_ID,
+        radioEffects,
       });
       const ttsLatency = Date.now() - ttsStartTime;
       
@@ -98,14 +101,17 @@ export class TTSController {
         pcm: 'audio/pcm',
         opus: 'audio/opus',
       };
-      
+
+      // Use actual format returned from service (may differ from requested format)
+      const responseFormat = audioFormat || format;
+
       // Hijack the response to bypass Fastify's response serialization
       // This prevents schema validation errors for binary streams
       reply.hijack();
-      
+
       reply.raw.statusCode = 200;
-      reply.raw.setHeader('Content-Type', contentTypeMap[format] || 'audio/mpeg');
-      reply.raw.setHeader('Content-Disposition', `inline; filename="tts-audio.${format}"`);
+      reply.raw.setHeader('Content-Type', contentTypeMap[responseFormat] || 'audio/mpeg');
+      reply.raw.setHeader('Content-Disposition', `inline; filename="tts-audio.${responseFormat}"`);
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('X-Content-Type-Options', 'nosniff');
       

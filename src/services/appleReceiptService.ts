@@ -135,29 +135,40 @@ export class AppleReceiptService {
       throw new Error(this.getStatusMessage(response.status));
     }
 
-    // Get the latest transaction info (for subscriptions)
-    // Note: latest_receipt_info array is NOT sorted by expiration date,
-    // so we need to find the transaction with the latest expires_date_ms
-    let latestInfo = response.latest_receipt_info?.[0];
-    if (response.latest_receipt_info && response.latest_receipt_info.length > 1) {
-      // Find the transaction with the latest expiration date
-      latestInfo = response.latest_receipt_info.reduce((latest, current) => {
+    // Helper: pick the transaction with the latest expires_date_ms (for subscriptions)
+    const pickLatestByExpiry = <T extends { expires_date_ms?: string }>(
+      items: T[]
+    ): T | undefined => {
+      if (!items?.length) return undefined;
+      return items.reduce((latest, current) => {
         const latestExpires = parseInt(latest.expires_date_ms || '0');
         const currentExpires = parseInt(current.expires_date_ms || '0');
         return currentExpires > latestExpires ? current : latest;
       });
+    };
+
+    // Prefer latest_receipt_info (current subscription state from Apple); fall back to receipt.in_app
+    // Both arrays are NOT sorted by expiration, so we must pick the transaction with latest expires_date_ms
+    let latestInfo = response.latest_receipt_info
+      ? pickLatestByExpiry(response.latest_receipt_info)
+      : undefined;
+    if (latestInfo && response.latest_receipt_info && response.latest_receipt_info.length > 1) {
       logger.info(
-        { 
+        {
           count: response.latest_receipt_info.length,
           selectedTransactionId: latestInfo.transaction_id,
-          selectedExpiresDate: latestInfo.expires_date_ms 
-            ? new Date(parseInt(latestInfo.expires_date_ms)).toISOString() 
-            : undefined
+          selectedExpiresDate: latestInfo.expires_date_ms
+            ? new Date(parseInt(latestInfo.expires_date_ms)).toISOString()
+            : undefined,
         },
-        '[AppleReceipt] Found multiple transactions, selected one with latest expiration'
+        '[AppleReceipt] Selected transaction with latest expiration from latest_receipt_info'
       );
     }
-    const inAppPurchase = latestInfo || response.receipt.in_app[0];
+    // Fallback: use receipt.in_app but pick latest by expiry (not [0] - that can be an old renewal)
+    const inAppFallback = response.receipt?.in_app?.length
+      ? pickLatestByExpiry(response.receipt.in_app)
+      : undefined;
+    const inAppPurchase = latestInfo || inAppFallback;
 
     if (!inAppPurchase) {
       throw new Error('No purchase information found in receipt');

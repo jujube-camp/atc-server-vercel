@@ -130,41 +130,7 @@ export class AuthController {
       });
     }
 
-    // Check if user is a premium member
-    const membership = await MembershipService.getMembership(user.id, request.server.log);
-    const isPremium = membership.tier !== 'FREE' && MembershipService.isMembershipActive(membership);
-
-    // If premium and has device info, handle device switching
-    if (isPremium && deviceId && (user as any).activeDeviceId && (user as any).activeDeviceId !== deviceId) {
-      // Deactivate all sessions on the old device
-      await prisma.authSession.updateMany({
-        where: {
-          userId: user.id,
-          deviceId: (user as any).activeDeviceId,
-          isActive: true,
-        },
-        data: {
-          isActive: false,
-        },
-      });
-
-      request.server.log.info(
-        {
-          userId: user.id,
-          oldDeviceId: (user as any).activeDeviceId,
-          newDeviceId: deviceId,
-        },
-        '[AuthController] Deactivated sessions on old device due to premium account login on new device'
-      );
-
-      // Send push notification to old device
-      await PushNotificationService.sendSessionInvalidatedNotification(
-        user.id,
-        (user as any).activeDeviceId,
-        deviceName,
-        request.server.log
-      );
-    }
+    // Note: multi-device access is allowed. Do not invalidate other sessions.
 
     // Create new auth session
     const authSession = await prisma.authSession.create({
@@ -177,8 +143,8 @@ export class AuthController {
       },
     });
 
-    // Update user's active device if premium
-    if (isPremium && deviceId) {
+    // Track most recent device (no enforcement)
+    if (deviceId) {
       await MembershipService.updateUserActiveDevice(user.id, deviceId, deviceName, request.server.log);
     }
 
@@ -467,41 +433,7 @@ export class AuthController {
         });
       }
 
-      // Check if user is a premium member
-      const membership = await MembershipService.getMembership(user.id, request.server.log);
-      const isPremium = membership.tier !== 'FREE' && MembershipService.isMembershipActive(membership);
-
-      // If premium and has device info, handle device switching
-      if (isPremium && deviceId && (user as any).activeDeviceId && (user as any).activeDeviceId !== deviceId) {
-        // Deactivate all sessions on the old device
-        await prisma.authSession.updateMany({
-          where: {
-            userId: user.id,
-            deviceId: (user as any).activeDeviceId,
-            isActive: true,
-          },
-          data: {
-            isActive: false,
-          },
-        });
-
-        request.server.log.info(
-          {
-            userId: user.id,
-            oldDeviceId: (user as any).activeDeviceId,
-            newDeviceId: deviceId,
-          },
-          '[AuthController] Deactivated sessions on old device due to premium account Apple Sign-In on new device'
-        );
-
-        // Send push notification to old device
-        await PushNotificationService.sendSessionInvalidatedNotification(
-          user.id,
-          (user as any).activeDeviceId,
-          deviceName,
-          request.server.log
-        );
-      }
+      // Note: multi-device access is allowed. Do not invalidate other sessions.
 
       // Create auth session
       const authSession = await prisma.authSession.create({
@@ -514,8 +446,8 @@ export class AuthController {
         },
       });
 
-      // Update user's active device if premium
-      if (isPremium && deviceId) {
+      // Track most recent device (no enforcement)
+      if (deviceId) {
         await MembershipService.updateUserActiveDevice(user.id, deviceId, deviceName, request.server.log);
       }
 

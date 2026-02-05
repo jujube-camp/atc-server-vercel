@@ -299,16 +299,18 @@ model Membership {
 }
 
 model MembershipPlan {
-  id               String         @id @default(cuid())
-  tier             MembershipTier @unique
-  monthlyPrice     Float          @map("monthly_price")
-  yearlyPrice      Float          @map("yearly_price")
-  yearlyDiscount   Float          @map("yearly_discount") // e.g., 0.2 for 20% discount
-  monthlyProductId String         @map("monthly_product_id")
-  yearlyProductId  String         @map("yearly_product_id")
-  isActive         Boolean        @default(true) @map("is_active")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
+  id                  String         @id @default(cuid())
+  tier                MembershipTier @unique
+  monthlyPrice        Float          @map("monthly_price")
+  yearlyPrice         Float          @map("yearly_price")
+  yearlyDiscount      Float          @map("yearly_discount") // e.g., 0.2 for 20% discount
+  monthlyProductId    String         @map("monthly_product_id")
+  yearlyProductId     String         @map("yearly_product_id")
+  monthlyTrialDays    Int?           @map("monthly_trial_days") // Trial period in days for monthly plan
+  yearlyTrialDays     Int?           @map("yearly_trial_days")  // Trial period in days for yearly plan
+  isActive            Boolean        @default(true) @map("is_active")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
 
   @@map("membership_plans")
 }
@@ -337,6 +339,28 @@ model Payment {
   @@index([originalTransactionId])
   @@index([membershipId])
   @@map("payments")
+}
+
+model AppleWebhookEvent {
+  id                    String   @id @default(cuid())
+  version               String
+  notificationType      String?  @map("notification_type")
+  notificationUUID      String?  @map("notification_uuid")
+  environment           String?
+  signedPayload         String?  @map("signed_payload") @db.Text
+  payload               Json?
+  status                String
+  errorMessage          String?  @map("error_message") @db.Text
+  originalTransactionId String?  @map("original_transaction_id")
+  transactionId         String?  @map("transaction_id")
+  productId             String?  @map("product_id")
+  receivedAt            DateTime @default(now()) @map("received_at")
+  processedAt           DateTime? @map("processed_at")
+
+  @@index([notificationUUID])
+  @@index([originalTransactionId])
+  @@index([transactionId])
+  @@map("apple_webhook_events")
 }
 
 model UsageRecord {
@@ -386,4 +410,21 @@ model TierLimitConfig {
   updatedAt            DateTime       @updatedAt @map("updated_at")
 
   @@map("tier_limit_configs")
+}
+
+// Payment mode: 'freemium' (default) or 'paywall' (force subscription before using app)
+enum PaymentMode {
+  FREEMIUM // Default: free basic features, pay for premium
+  PAYWALL  // Force subscription (with trial) before using app
+}
+
+model AppConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("app_configs")
 }

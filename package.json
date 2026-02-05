@@ -52,6 +52,7 @@
     "tier-limits:view:prod": "dotenv -e .env.production -- tsx scripts/view-tier-limits.ts",
     "tier-limits:update": "dotenv -e .env.development -- tsx scripts/update-tier-limits.ts",
     "tier-limits:update:prod": "dotenv -e .env.production -- tsx scripts/update-tier-limits.ts",
+    "migrate:rds-to-neon": "bash scripts/migrate-rds-to-neon.sh",
     "fsm:visualize:data": "tsx tools/generate-fsm-visualizer-data.ts",
     "fsm:visualize": "pnpm run fsm:visualize:data && echo '\\n############################################################' && echo '#  OPEN http://localhost:8888/tools/fsm-visualizer.html  #' && echo '############################################################\\n' && npx serve -p 8888 ."
   },

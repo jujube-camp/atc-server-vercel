@@ -11,10 +11,11 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
    * Generate TTS audio response using Fish Audio HTTP API
    * Query params:
    *   - text: string (required) - Text to convert to speech
-   *   - format?: 'wav' | 'pcm' | 'mp3' | 'opus' (default: 'mp3')
+   *   - format?: 'wav' | 'pcm' | 'mp3' | 'opus' (default: 'wav')
    *   - reference_id?: string - Reference audio ID for voice cloning
    *   - latency?: 'normal' | 'balanced' (default: 'normal')
-   * 
+   *   - radioEffects?: 'standard' | 'light' | 'heavy' | 'clear' (default: 'standard')
+   *
    * Returns: audio data (format depends on format parameter)
    */
   server.get(
@@ -29,6 +30,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
           latency: z.enum(['normal', 'balanced']).optional(),
           session_id: z.string().min(1), // Required - needed for S3 storage
           transmission_id: z.string().optional(),
+          radioEffects: z.enum(['standard', 'light', 'heavy', 'clear']).optional(),
         }),
         // No response schema - binary streams cannot be validated by ZodTypeProvider
       },

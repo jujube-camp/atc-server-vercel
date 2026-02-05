@@ -16,12 +16,7 @@ async function getApp(): Promise<FastifyInstance> {
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const fastify = await getApp();
-    
-    // Normalize URL: Vercel passes path relative to /api, Fastify expects /api/v1/...
-    let url = req.url ?? '/';
-    if (!url.startsWith('/api')) {
-      url = `/api${url.startsWith('/') ? url : '/' + url}`;
-    }
+    const url = req.url ?? '/';
 
     // Use Fastify's inject for reliable serverless handling
     const response = await fastify.inject({

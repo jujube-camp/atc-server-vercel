@@ -31,6 +31,10 @@ const membershipRoutes: FastifyPluginAsync = async (fastify) => {
               trainingSessionsResetAt: z.date().nullable(),
               recordingAnalysesResetAt: z.date().nullable(),
             }),
+            // App-wide payment mode configuration
+            paymentMode: z.enum(['FREEMIUM', 'PAYWALL']),
+            // In PAYWALL mode, FREE (or expired) users must subscribe before using the app
+            requiresSubscription: z.boolean(),
           }),
         },
       },

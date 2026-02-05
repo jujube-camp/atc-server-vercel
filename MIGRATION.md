@@ -21,15 +21,30 @@ git push -u origin main
 
 4. **Data migration from RDS to Neon** (when ready):
 
-   ```bash
-   # Export from RDS
-   pg_dump -h <rds-host> -U <user> -d <database> -F c -f backup.dump
+   Use the script (requires `pg_dump`/`pg_restore` in PATH, e.g. `brew install libpq` then `export PATH="/opt/homebrew/opt/libpq/bin:$PATH"`):
 
-   # Import to Neon (use connection details from Neon dashboard)
-   pg_restore -h <neon-host> -U <user> -d <database> --no-owner --no-acl backup.dump
+   ```bash
+   export SOURCE_DATABASE_URL="postgresql://user:pass@<rds-host>:5432/smart-atc"
+   export TARGET_DATABASE_URL="postgresql://user:pass@<neon-pooler-host>/neondb?sslmode=require"
+   pnpm run migrate:rds-to-neon
+   # Or: ./scripts/migrate-rds-to-neon.sh
    ```
 
-5. Run Prisma migrations on Neon:
+   The script will:
+   1. Run `prisma migrate deploy` on Neon so the schema is up to date.
+   2. Dump data from RDS (data-only, custom format).
+   3. Restore data into Neon (data-only, no-owner, no-acl).
+
+   **If RDS connection times out:** RDS is often in a VPC and not reachable from your laptop. Run the migration from a host that can reach RDS (e.g. an EC2 instance in the same VPC, or after connecting via VPN/bastion). Copy the script and env vars to that host and run the same commands.
+
+   **If data-only restore fails** (schema drift, missing tables/columns, duplicate keys): do a full schema+data restore to align Neon with RDS:
+
+   ```bash
+   pg_dump "<RDS_URL>" -F c --no-owner --no-acl -f /tmp/rds.dump
+   pg_restore -d "<NEON_URL>?sslmode=require" --clean --if-exists --no-owner --no-acl /tmp/rds.dump
+   ```
+
+5. Run Prisma migrations on Neon (if not already done by the script):
 
    ```bash
    DATABASE_URL="<neon-pooled-url>" pnpm prisma migrate deploy
@@ -57,4 +72,31 @@ pnpm build
    - `AUDIO_PROCESSOR_API_URL` (optional)
 4. Deploy: `pnpm deploy` (preview) or `pnpm deploy:prod` (production).
 
-Update the mobile app API base URL to your Vercel URL (e.g. `https://your-project.vercel.app`).
+Update the mobile app API base URL to your Vercel URL (e.g. `https://your-project.vercel.app/api/v1`).
+
+## Sign in with Apple (Post-Migration Checklist)
+
+Sign in with Apple uses the **same** backend endpoint as before; the only migration concern is that the **server** the app talks to is now Vercel, and **env** on Vercel must be correct.
+
+### Server (Vercel)
+
+1. **`APPLE_CLIENT_ID`** must be set in Vercel → Project → Settings → Environment Variables.
+   - Value must be your **iOS app bundle ID**: `com.jujubecamp.aviateai`.
+   - Used to verify the Apple identity token (`aud` claim). If missing or wrong, you get "Apple Sign-In is not configured" or token verification errors.
+
+2. No Service ID or web redirect is required for **native iOS** (expo-apple-authentication). The identity token audience is the app bundle ID.
+
+### Client (smart-atc)
+
+1. **Production builds** must use the Vercel API base URL:
+   - `app.config.js`: production uses `https://atc-server-vercel.vercel.app/api/v1`.
+   - `eas.json`: production profile has `API_BASE_URL: "https://atc-server-vercel.vercel.app/api/v1"`.
+   - The app then calls `POST ${BASE_URL}/auth/apple` → `https://atc-server-vercel.vercel.app/api/v1/auth/apple`.
+
+2. **Development / Expo Go**: If you run with a dev profile, `apiBaseUrl` is usually `http://<local-ip>:3000/api/v1`. Sign in with Apple will hit your **local** server; ensure that server is running and has `APPLE_CLIENT_ID=com.jujubecamp.aviateai` in `.env`.
+
+### Quick verification
+
+- **Missing APPLE_CLIENT_ID on Vercel**: Server returns **500** and message "Apple Sign-In is not configured. Please set APPLE_CLIENT_ID environment variable."
+- **Wrong APPLE_CLIENT_ID** (e.g. old Service ID): Token verification fails → **401** "Apple token verification failed: ...".
+- **App pointing at wrong server**: Ensure you use a **production** (or preview) build with `API_BASE_URL` set to the Vercel URL when testing Sign in with Apple against Vercel.

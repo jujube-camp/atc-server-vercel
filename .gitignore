@@ -42,6 +42,7 @@ uploads/
 
 .cursor/
 scripts/data/
+.migration-backup.dump
 # Script build artifacts (scripts are run with tsx, not compiled)
 scripts/**/*.js
 scripts/**/*.d.ts

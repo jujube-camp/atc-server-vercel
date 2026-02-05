@@ -56,50 +56,9 @@ export async function authenticate(
  * Premium device check middleware - ensures premium features are only used on active device
  */
 export async function premiumDeviceCheck(
-  request: FastifyRequest,
-  reply: FastifyReply
+  _request: FastifyRequest,
+  _reply: FastifyReply
 ): Promise<void> {
-  const userId = (request.user as any).userId;
-  const deviceId = request.headers['x-device-id'] as string;
-
-  if (!deviceId) {
-    return reply.code(400).send({
-      error: 'Device ID is required for premium features',
-    });
-  }
-
-  // Get user's membership
-  const membership = await prisma.membership.findUnique({
-    where: { userId },
-  });
-
-  // If not premium or membership expired, skip device check
-  if (!membership || membership.tier === 'FREE' || 
-      (membership.expiresAt && membership.expiresAt <= new Date())) {
-    return;
-  }
-
-  // Get user's active device
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      activeDeviceId: true,
-      activeDeviceName: true,
-    },
-  });
-
-  if (!user) {
-    return reply.code(404).send({
-      error: 'User not found',
-    });
-  }
-
-  // Check if current device is the active device
-  if (user.activeDeviceId && user.activeDeviceId !== deviceId) {
-    return reply.code(403).send({
-      error: 'Premium features are currently active on another device',
-      activeDevice: user.activeDeviceName || 'Unknown device',
-      message: 'Please restore purchases on this device to switch access',
-    });
-  }
+  // Multi-device access is allowed. Keep middleware for compatibility.
+  return;
 }

@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { MembershipService, MembershipTier } from './membershipService.js';
 import { prisma } from '../utils/prisma.js';
 import https from 'https';
+import { PRODUCT_ID_TO_TIER, getPriceByBillingPeriod, DEFAULT_CURRENCY, SUPPORTED_PRODUCT_IDS } from '../config/pricing.js';
 
 /**
  * Service for handling Apple App Store Server Notifications V2
@@ -57,7 +58,8 @@ export class AppleWebhookV2Service {
    */
   static async handleV2Notification(
     signedPayload: string,
-    logger: FastifyBaseLogger
+    logger: FastifyBaseLogger,
+    eventId?: string
   ): Promise<void> {
     let decodedPayload: ResponseBodyV2DecodedPayload;
     try {
@@ -78,6 +80,16 @@ export class AppleWebhookV2Service {
         },
         '[AppleWebhookV2] ✅ Payload decoded successfully'
       );
+      if (eventId) {
+        await (prisma as any).appleWebhookEvent.update({
+          where: { id: eventId },
+          data: {
+            notificationType: decodedPayload.notificationType,
+            notificationUUID: decodedPayload.notificationUUID,
+            environment: decodedPayload.data?.environment,
+          },
+        });
+      }
       await this.processV2Notification(decodedPayload, logger);
     } catch (error) {
       logger.error(
@@ -89,6 +101,16 @@ export class AppleWebhookV2Service {
         },
         '[AppleWebhookV2] ❌ Failed to decode or process V2 notification'
       );
+      if (eventId) {
+        await (prisma as any).appleWebhookEvent.update({
+          where: { id: eventId },
+          data: {
+            status: 'error',
+            errorMessage: error instanceof Error ? error.message : String(error),
+            processedAt: new Date(),
+          },
+        });
+      }
       throw error;
     }
   }
@@ -138,6 +160,16 @@ export class AppleWebhookV2Service {
       },
       '[AppleWebhookV2] 📝 Transaction info decoded'
     );
+    if (payload.notificationUUID) {
+      await (prisma as any).appleWebhookEvent.updateMany({
+        where: { notificationUUID: payload.notificationUUID },
+        data: {
+          transactionId: transactionInfo.transactionId,
+          originalTransactionId: transactionInfo.originalTransactionId,
+          productId: transactionInfo.productId,
+        },
+      });
+    }
 
     // Find user by original transaction ID
     const payment = await prisma.payment.findFirst({
@@ -181,20 +213,13 @@ export class AppleWebhookV2Service {
       '[AppleWebhookV2] ✅ Found payment record for user'
     );
 
-    // Map product ID to tier
-    const productIdToTier: Record<string, MembershipTier> = {
-      'com.aviateai.premium.monthly': MembershipTier.PREMIUM,
-      'com.aviateai.premium.yearly': MembershipTier.PREMIUM,
-      'com.aviateai.golden.monthly': MembershipTier.PREMIUM,
-      'com.aviateai.golden.yearly': MembershipTier.PREMIUM,
-    };
-
-    const tier = productIdToTier[productId];
+    // Map product ID to tier using centralized config
+    const tier = PRODUCT_ID_TO_TIER[productId];
     if (!tier) {
       logger.warn(
         {
           productId,
-          supportedProductIds: Object.keys(productIdToTier),
+          supportedProductIds: SUPPORTED_PRODUCT_IDS,
         },
         '[AppleWebhookV2] ⚠️ Unknown product ID'
       );
@@ -247,8 +272,7 @@ export class AppleWebhookV2Service {
               '[AppleWebhookV2] 📝 Creating payment record for renewal'
             );
 
-            const isYearly = productId.includes('.yearly');
-            const amount = isYearly ? 69.99 : 14.99;
+            const amount = getPriceByBillingPeriod(productId);
 
             await MembershipService.recordPayment(
               userId,
@@ -257,7 +281,7 @@ export class AppleWebhookV2Service {
               productId,
               tier,
               amount,
-              'USD',
+              DEFAULT_CURRENCY,
               'completed',
               undefined, // No receipt data in webhook
               expiresDate,

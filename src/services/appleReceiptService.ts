@@ -50,6 +50,23 @@ export class AppleReceiptService {
   private static readonly PRODUCTION_URL = 'https://buy.itunes.apple.com/verifyReceipt';
   private static readonly SANDBOX_URL = 'https://sandbox.itunes.apple.com/verifyReceipt';
   
+  private static readonly MAX_RETRIES = 3;
+  private static readonly RETRY_DELAY_MS = 1000;
+
+  /**
+   * Check if status code is retryable (Apple internal errors 21100-21199)
+   */
+  private static isRetryableStatus(status: number): boolean {
+    return status >= 21100 && status <= 21199;
+  }
+
+  /**
+   * Sleep helper for retry delays
+   */
+  private static sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   /**
    * Verify receipt with Apple's servers
    */
@@ -63,26 +80,63 @@ export class AppleReceiptService {
       throw new Error('APPLE_SHARED_SECRET not configured');
     }
 
-    // Try production first
-    let response = await this.sendVerificationRequest(
-      this.PRODUCTION_URL,
-      receiptData,
-      password,
-      logger
-    );
+    let lastError: Error | null = null;
+    let useSandbox = false;
 
-    // If status is 21007, receipt is from sandbox, retry with sandbox URL
-    if (response.status === 21007) {
-      logger.info('[AppleReceipt] Receipt is from sandbox, retrying with sandbox URL');
-      response = await this.sendVerificationRequest(
-        this.SANDBOX_URL,
-        receiptData,
-        password,
-        logger
-      );
+    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        const url = useSandbox ? this.SANDBOX_URL : this.PRODUCTION_URL;
+        const response = await this.sendVerificationRequest(
+          url,
+          receiptData,
+          password,
+          logger
+        );
+
+        // If status is 21007, receipt is from sandbox, switch to sandbox URL and retry
+        if (response.status === 21007) {
+          logger.info('[AppleReceipt] Receipt is from sandbox, retrying with sandbox URL');
+          useSandbox = true;
+          continue;
+        }
+
+        // If status is 21008, receipt is from production but sent to sandbox (shouldn't happen with our flow)
+        if (response.status === 21008) {
+          logger.info('[AppleReceipt] Receipt is from production, retrying with production URL');
+          useSandbox = false;
+          continue;
+        }
+
+        // If retryable error (21100-21199), wait and retry
+        if (this.isRetryableStatus(response.status)) {
+          logger.warn(
+            { status: response.status, attempt, maxRetries: this.MAX_RETRIES },
+            '[AppleReceipt] Retryable error from Apple, will retry'
+          );
+          if (attempt < this.MAX_RETRIES) {
+            await this.sleep(this.RETRY_DELAY_MS * attempt);
+            continue;
+          }
+          // Last attempt failed with retryable error
+          throw new Error(`Apple server temporarily unavailable (status ${response.status}). Please try again.`);
+        }
+
+        return this.parseVerificationResponse(response, logger);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < this.MAX_RETRIES && !lastError.message.includes('Invalid receipt')) {
+          logger.warn(
+            { error: lastError.message, attempt, maxRetries: this.MAX_RETRIES },
+            '[AppleReceipt] Verification attempt failed, retrying'
+          );
+          await this.sleep(this.RETRY_DELAY_MS * attempt);
+        } else {
+          throw lastError;
+        }
+      }
     }
 
-    return this.parseVerificationResponse(response, logger);
+    throw lastError || new Error('Receipt verification failed after retries');
   }
 
   /**
@@ -217,6 +271,11 @@ export class AppleReceiptService {
       21008: 'This receipt is from the production environment, but it was sent to the test environment for verification.',
       21010: 'This receipt could not be authorized. Treat this the same as if a purchase was never made.',
     };
+
+    // Handle 21100-21199 range (internal data access errors)
+    if (status >= 21100 && status <= 21199) {
+      return `Apple server internal error (${status}). This is temporary - please try again.`;
+    }
 
     return messages[status] || `Unknown status code: ${status}`;
   }

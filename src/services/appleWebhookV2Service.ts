@@ -94,7 +94,7 @@ export class AppleWebhookV2Service {
           },
         });
       }
-      await this.processV2Notification(decodedPayload, logger);
+      await this.processV2Notification(decodedPayload, logger, eventId);
     } catch (error) {
       logger.error(
         { 
@@ -120,11 +120,42 @@ export class AppleWebhookV2Service {
   }
 
   /**
+   * Build a JSON-serializable decoded payload for storage (handles BigInt etc.)
+   */
+  private static buildDecodedPayloadForStorage(
+    payload: ResponseBodyV2DecodedPayload,
+    transactionInfo: Record<string, unknown>
+  ): Record<string, unknown> {
+    const data = payload.data;
+    return {
+      notificationType: payload.notificationType,
+      subtype: payload.subtype ?? null,
+      notificationUUID: payload.notificationUUID ?? null,
+      signedDate: payload.signedDate != null ? Number(payload.signedDate) : null,
+      data: data
+        ? {
+            bundleId: data.bundleId ?? null,
+            bundleVersion: data.bundleVersion ?? null,
+            environment: data.environment ?? null,
+            appAppleId: data.appAppleId != null ? Number(data.appAppleId) : null,
+          }
+        : null,
+      transaction: Object.fromEntries(
+        Object.entries(transactionInfo).map(([k, v]) => [
+          k,
+          typeof v === 'bigint' ? String(v) : v,
+        ])
+      ),
+    };
+  }
+
+  /**
    * Process decoded V2 notification
    */
   private static async processV2Notification(
     payload: ResponseBodyV2DecodedPayload,
-    logger: FastifyBaseLogger
+    logger: FastifyBaseLogger,
+    eventId?: string
   ): Promise<void> {
     const notificationType = payload.notificationType;
     const data = payload.data;
@@ -153,6 +184,7 @@ export class AppleWebhookV2Service {
     const env = payload.data?.environment === 'Production' ? Environment.PRODUCTION : Environment.SANDBOX;
     const verifier = await this.getVerifier(env);
     const transactionInfo = await verifier.verifyAndDecodeTransaction(signedTransactionInfo);
+    const transactionInfoPlain = transactionInfo as Record<string, unknown>;
 
     logger.info(
       {
@@ -164,14 +196,28 @@ export class AppleWebhookV2Service {
       },
       '[AppleWebhookV2] 📝 Transaction info decoded'
     );
-    if (payload.notificationUUID) {
+
+    const decodedPayloadForStorage = this.buildDecodedPayloadForStorage(payload, transactionInfoPlain);
+    const updateData: {
+      transactionId?: string;
+      originalTransactionId?: string;
+      productId?: string;
+      payload?: Record<string, unknown>;
+    } = {
+      transactionId: String(transactionInfo.transactionId ?? ''),
+      originalTransactionId: String(transactionInfo.originalTransactionId ?? ''),
+      productId: transactionInfo.productId ?? undefined,
+      payload: decodedPayloadForStorage,
+    };
+    if (eventId) {
+      await (prisma as any).appleWebhookEvent.update({
+        where: { id: eventId },
+        data: updateData,
+      });
+    } else if (payload.notificationUUID) {
       await (prisma as any).appleWebhookEvent.updateMany({
         where: { notificationUUID: payload.notificationUUID },
-        data: {
-          transactionId: transactionInfo.transactionId,
-          originalTransactionId: transactionInfo.originalTransactionId,
-          productId: transactionInfo.productId,
-        },
+        data: updateData,
       });
     }
 

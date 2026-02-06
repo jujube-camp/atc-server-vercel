@@ -196,19 +196,14 @@ export async function wavToMp3(wavBuffer: Buffer): Promise<Buffer> {
   try {
     console.log(`[AudioUtils] Converting WAV to MP3, input size: ${wavBuffer.length} bytes`);
 
-    // Write WAV to temp file
     await writeFile(inputFile, wavBuffer);
-
-    // Convert WAV to MP3 using ffmpeg
     await execAsync(
       `ffmpeg -i "${inputFile}" -acodec libmp3lame -b:a 128k "${outputFile}" -y 2>/dev/null`
     );
 
-    // Read MP3 from temp file
     const mp3Buffer = await readFile(outputFile);
     console.log(`[AudioUtils] Conversion complete, output size: ${mp3Buffer.length} bytes`);
 
-    // Clean up temp files
     await unlink(inputFile).catch(() => {});
     await unlink(outputFile).catch(() => {});
 
@@ -216,7 +211,6 @@ export async function wavToMp3(wavBuffer: Buffer): Promise<Buffer> {
   } catch (error) {
     console.error('[AudioUtils] WAV to MP3 conversion failed:', error);
 
-    // Clean up on error
     await unlink(inputFile).catch(() => {});
     await unlink(outputFile).catch(() => {});
 

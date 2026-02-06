@@ -53,7 +53,7 @@ export class TTSController {
 
       // Generate audio with buffer for S3 upload
       const ttsStartTime = Date.now();
-      const { buffer, stream, format: audioFormat } = await FishAudioService.generateAudioWithBuffer({
+      const { buffer, format: audioFormat } = await FishAudioService.generateAudioWithBuffer({
         text,
         format,
         latency,
@@ -105,19 +105,15 @@ export class TTSController {
       // Use actual format returned from service (may differ from requested format)
       const responseFormat = audioFormat || format;
 
-      // Hijack the response to bypass Fastify's response serialization
-      // This prevents schema validation errors for binary streams
-      reply.hijack();
-
-      reply.raw.statusCode = 200;
-      reply.raw.setHeader('Content-Type', contentTypeMap[responseFormat] || 'audio/mpeg');
-      reply.raw.setHeader('Content-Disposition', `inline; filename="tts-audio.${responseFormat}"`);
-      reply.raw.setHeader('Cache-Control', 'no-cache');
-      reply.raw.setHeader('X-Content-Type-Options', 'nosniff');
-      
-      // Pipe the stream directly to response
-      stream.pipe(reply.raw);
-      return;
+      // Send the buffer directly through Fastify so fastify.inject() captures
+      // the binary payload correctly (reply.hijack + stream.pipe breaks inject).
+      return reply
+        .code(200)
+        .header('Content-Type', contentTypeMap[responseFormat] || 'audio/mpeg')
+        .header('Content-Disposition', `inline; filename="tts-audio.${responseFormat}"`)
+        .header('Cache-Control', 'no-cache')
+        .header('X-Content-Type-Options', 'nosniff')
+        .send(buffer);
     } catch (error) {
       request.server.log.error({ error }, '[TTSController] Error generating Fish Audio');
       return reply.code(500).send({

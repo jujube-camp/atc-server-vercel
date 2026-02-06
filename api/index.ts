@@ -34,7 +34,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       }
     }
 
-    res.status(response.statusCode).send(response.payload);
+    // Use rawPayload (Buffer) to preserve binary data (e.g. audio streams)
+    res.status(response.statusCode).send(response.rawPayload);
   } catch (error) {
     console.error('[Vercel Handler] Error:', error);
     res.status(500).json({ error: 'Internal Server Error' });

@@ -405,7 +405,8 @@ export class MembershipController {
       const payments = await MembershipService.getPaymentHistory(userId);
       reply.send({ payments });
     } catch (error) {
-      request.server.log.error({ error }, '[MembershipController] Failed to get payment history');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      request.server.log.error({ error: errorMessage, stack: error instanceof Error ? error.stack : undefined }, '[MembershipController] Failed to get payment history');
       reply.code(500).send({ error: 'Failed to get payment history' });
     }
   }
@@ -600,7 +601,8 @@ export class MembershipController {
         },
       });
     } catch (error) {
-      request.server.log.error({ error }, '[MembershipController] Failed to restore purchases');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      request.server.log.error({ error: errorMessage, stack: error instanceof Error ? error.stack : undefined }, '[MembershipController] Failed to restore purchases');
       reply.code(500).send({ error: 'Failed to restore purchases' });
     }
   }

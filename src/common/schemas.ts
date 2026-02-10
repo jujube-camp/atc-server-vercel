@@ -330,3 +330,28 @@ export const airportResponseSchema = z.object({
 });
 
 export type AirportResponse = z.infer<typeof airportResponseSchema>;
+
+// ── Flashcard Exercises ──────────────────────────────────────────────
+
+/** Shape of the JSONB `content` column stored in FlashcardExercise */
+export const flashcardContentSchema = z.object({
+  scenarioContext: z.string(),
+  atcPromptText: z.string(),
+  atcPromptAudioUrl: z.string(),
+  sampleResponseText: z.string(),
+  sampleResponseAudioUrl: z.string().optional(),
+  callsign: z.string().optional(),
+  difficulty: z.enum(['Easy', 'Medium', 'Hard']).optional(),
+});
+
+export type FlashcardContent = z.infer<typeof flashcardContentSchema>;
+
+/** Public-facing exercise object returned by GET /flashcards */
+export const flashcardExerciseSchema = z.object({
+  id: z.string(),
+  topic: z.string(),
+  content: flashcardContentSchema,
+  displayOrder: z.number(),
+});
+
+export type FlashcardExercise = z.infer<typeof flashcardExerciseSchema>;

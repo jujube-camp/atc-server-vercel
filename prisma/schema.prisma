@@ -428,3 +428,16 @@ model AppConfig {
 
   @@map("app_configs")
 }
+
+model FlashcardExercise {
+  id           String   @id @default(cuid())
+  topic        String                        // grouping label, e.g. "Ground Comms", "Tower Comms", "Approach"
+  content      Json     @default("{}")       // JSONB blob: scenarioContext, atcPromptText, atcPromptAudioUrl, sampleResponseText, callsign?
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([topic])
+  @@map("flashcard_exercises")
+}

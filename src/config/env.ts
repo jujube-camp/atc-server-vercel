@@ -24,6 +24,8 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   FISH_AUDIO_API_KEY: z.string().optional(),
   FISH_AUDIO_REFERENCE_ID: z.string().default('27041c39c7ad4c02b14fe34af1211fce'),
+  /** Voice for sample response TTS (e.g. pilot); voice 1 = FISH_AUDIO_REFERENCE_ID, voice 2 = this */
+  FISH_AUDIO_REFERENCE_ID_VOICE_2: z.string().optional(),
   // Priority: HTTPS_PROXY > HTTP_PROXY > PROXY
   HTTPS_PROXY: z.string().optional(),
   HTTP_PROXY: z.string().optional(),

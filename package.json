@@ -76,6 +76,7 @@
     "@fastify/websocket": "^11.2.0",
     "@prisma/client": "5.22.0",
     "@types/fluent-ffmpeg": "^2.1.28",
+    "@vercel/blob": "^2.2.0",
     "bcryptjs": "^3.0.2",
     "csv-parse": "^6.1.0",
     "dotenv": "^16.4.5",

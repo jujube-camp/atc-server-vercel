@@ -21,6 +21,7 @@ import membershipRoutes from './routes/membership-routes.js';
 import appleWebhookRoutes from './routes/apple-webhook-routes.js';
 import versionRoutes from './routes/version-routes.js';
 import clientLogRoutes from './routes/client-log-routes.js';
+import flashcardRoutes from './routes/flashcard-routes.js';
 
 // Extend Fastify types for JWT
 declare module 'fastify' {
@@ -304,6 +305,7 @@ async function buildServer() {
   await server.register(appleWebhookRoutes, { prefix: '/api/v1/webhooks' });
   await server.register(versionRoutes, { prefix: '/api/v1/version' });
   await server.register(clientLogRoutes, { prefix: '/api/v1/client-logs' });
+  await server.register(flashcardRoutes, { prefix: '/api/v1/flashcards' });
 
   return server;
 }

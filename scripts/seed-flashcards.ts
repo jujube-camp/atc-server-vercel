@@ -29,6 +29,7 @@ const prisma = new PrismaClient();
 interface FlashcardJsonItem {
   phase: string;
   difficulty: string;
+  scenarioContext?: string;
   atcText: string;
   sampleResponse: string;
 }
@@ -83,8 +84,25 @@ async function main() {
       },
     });
 
+    const scenarioContext = item.scenarioContext || item.phase;
+
     if (existing) {
-      console.log(`  ⏭  [${i + 1}/${items.length}] ${topic.slice(0, 40)}… already exists — skipping`);
+      // Update scenarioContext if it changed (e.g. after adding to JSON)
+      const existingContent = existing.content as Record<string, unknown>;
+      if (existingContent && existingContent.scenarioContext !== scenarioContext) {
+        await prisma.flashcardExercise.update({
+          where: { id: existing.id },
+          data: {
+            content: {
+              ...(existingContent as object),
+              scenarioContext,
+            },
+          },
+        });
+        console.log(`  📝 [${i + 1}/${items.length}] Updated scenarioContext`);
+      } else {
+        console.log(`  ⏭  [${i + 1}/${items.length}] ${topic.slice(0, 40)}… already exists — skipping`);
+      }
       skipped++;
       continue;
     }
@@ -124,7 +142,7 @@ async function main() {
         topic,
         displayOrder,
         content: {
-          scenarioContext: item.phase,
+          scenarioContext,
           atcPromptText: item.atcText,
           atcPromptAudioUrl: atcUrl,
           sampleResponseText: item.sampleResponse,

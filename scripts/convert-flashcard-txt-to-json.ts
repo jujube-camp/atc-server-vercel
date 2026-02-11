@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Converts scripts/data/flashcard.txt to scripts/data/flashcard.json
- * Output: { phase, difficulty, atcText (from HarderAtcText only), sampleResponse }
+ * Output: { phase, difficulty, scenarioContext, atcText (from HarderAtcText only), sampleResponse }
  */
 
 import * as fs from 'fs';
@@ -14,17 +14,12 @@ const outputPath = path.join(__dirname, 'data', 'flashcard.json');
 
 const raw = fs.readFileSync(inputPath, 'utf-8');
 
-// Phase header: "Phase 1: ATIS, Clearance Delivery, Initial Setup (10)"
-const phaseRe = /^Phase (\d+): (.+?) \(\d+\)$/gm;
-
-// Card block: tab, number, tab, "Difficulty: Easy|Medium|Hard"
-// Then HarderAtcText: "..." and SampleResponse: "..."
-// We'll split by lines and iterate, tracking current phase and parsing each card.
 const lines = raw.split('\n');
 
 interface Card {
   phase: string;
   difficulty: string;
+  scenarioContext: string;
   atcText: string;
   sampleResponse: string;
 }
@@ -50,13 +45,16 @@ for (let i = 0; i < lines.length; i++) {
   const cardMatch = line.match(/^\s*(\d+)\.\s*Difficulty:\s*(Easy|Medium|Hard)\s*$/);
   if (cardMatch && currentPhase) {
     const difficulty = cardMatch[2];
+    let scenarioContext = '';
     let atcText = '';
     let sampleResponse = '';
 
-    // Next non-empty lines should be scenarioContext, AtcText (easy), HarderAtcText, SampleResponse
-    for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+    // Next lines: scenarioContext, AtcText (easy), HarderAtcText, SampleResponse
+    for (let j = i + 1; j < Math.min(i + 7, lines.length); j++) {
       const l = lines[j];
-      if (l.startsWith('HarderAtcText:')) {
+      if (l.startsWith('scenarioContext:')) {
+        scenarioContext = l.replace(/^scenarioContext:\s*/, '').trim();
+      } else if (l.startsWith('HarderAtcText:')) {
         atcText = extractQuoted(l);
       } else if (l.startsWith('SampleResponse:')) {
         sampleResponse = extractQuoted(l);
@@ -65,7 +63,7 @@ for (let i = 0; i < lines.length; i++) {
     }
 
     if (atcText || sampleResponse) {
-      cards.push({ phase: currentPhase, difficulty, atcText, sampleResponse });
+      cards.push({ phase: currentPhase, difficulty, scenarioContext, atcText, sampleResponse });
     }
   }
 }
